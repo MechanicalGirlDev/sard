@@ -5,14 +5,14 @@
 use std::sync::Arc;
 
 use glam::Vec3;
-use rein::ecs::components::rendering::{
+use sard::ecs::components::rendering::{
     CameraComponent, FrustumCullable, LightComponent, MaterialHandle, MeshHandle, MeshRenderer,
     Visible,
 };
-use rein::ecs::components::transform::{GlobalTransform, Transform};
-use rein::ecs::systems::{culling_system, render_system, transform_system};
-use rein::renderer::light::LightType;
-use rein::{
+use sard::ecs::components::transform::{GlobalTransform, Transform};
+use sard::ecs::systems::{culling_system, render_system, transform_system};
+use sard::renderer::light::LightType;
+use sard::{
     screen_target, Camera, ClearState, ColorMaterial, FrameOutput, Mesh, Window, WindowSettings,
 };
 

@@ -4,7 +4,7 @@ This file provides guidance to coding agents working in this repository.
 
 ## Project Overview
 
-Rein is a 3D engine built on wgpu with ECS (hecs), physics simulation, and GPU compute. Primary use case is robotics visualization with URDF support. Architecture inspired by [three-d](https://github.com/asny/three-d).
+Sard is a 3D engine built on wgpu with ECS (hecs), physics simulation, and GPU compute. Primary use case is robotics visualization with URDF support. Architecture inspired by [three-d](https://github.com/asny/three-d).
 
 ## Build Commands
 
@@ -35,8 +35,8 @@ cargo check --workspace                    # Check all examples and benchmarks
 
 Benchmarks are in `benchmarks/`:
 ```bash
-cargo bench -p rein-bench --bench physics       # Criterion benchmarks
-cargo bench -p rein-bench --bench physics_iai   # IAI-Callgrind benchmarks
+cargo bench -p sard-bench --bench physics       # Criterion benchmarks
+cargo bench -p sard-bench --bench physics_iai   # IAI-Callgrind benchmarks
 ```
 
 ## Architecture

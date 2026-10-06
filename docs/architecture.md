@@ -1,6 +1,6 @@
 # Architecture
 
-Rein is a layered library. Dependencies should point downward through this list:
+Sard is a layered library. Dependencies should point downward through this list:
 
 1. `context` owns the wgpu device and queue.
 2. `core` provides buffers, textures, render targets, pipelines, and vertex layouts.
@@ -27,9 +27,9 @@ being duplicated between `renderer` and `scene`.
 
 ## Repository layout
 
-- `src/` contains the published `rein` library.
+- `src/` contains the published `sard` library.
 - `examples/*` are runnable workspace packages and share the root `Cargo.lock`.
-- `benchmarks/` is the `rein-bench` workspace package.
+- `benchmarks/` is the `sard-bench` workspace package.
 - `src/shaders/` contains runtime-compiled WGSL, grouped by general, effect, and compute usage.
 
 Workspace packages deliberately use one dependency resolution so examples exercise the same wgpu

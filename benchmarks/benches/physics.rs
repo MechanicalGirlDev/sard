@@ -5,14 +5,14 @@
 
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
 use glam::{Mat4, Vec3};
-use rein::ecs::components::physics::ColliderShape;
-use rein::ecs::components::transform::GlobalTransform;
-use rein::physics::broadphase::SweepAndPrune;
-use rein::physics::narrowphase::{
+use sard::ecs::components::physics::ColliderShape;
+use sard::ecs::components::transform::GlobalTransform;
+use sard::physics::broadphase::SweepAndPrune;
+use sard::physics::narrowphase::{
     box_sphere, detect_collision, gjk_intersection, sat_box_box, sphere_sphere,
 };
-use rein::physics::solver::solve_contacts;
-use rein_bench::*;
+use sard::physics::solver::solve_contacts;
+use sard_bench::*;
 
 // ---------------------------------------------------------------------------
 // Broadphase
@@ -279,9 +279,9 @@ fn bench_pipeline(c: &mut Criterion) {
                     w
                 },
                 |mut w| {
-                    rein::physics::rigid_body::apply_gravity(&mut w, Vec3::new(0.0, -9.81, 0.0));
-                    rein::physics::rigid_body::integrate_velocities(&mut w, 1.0 / 60.0);
-                    rein::physics::rigid_body::integrate_positions(&mut w, 1.0 / 60.0);
+                    sard::physics::rigid_body::apply_gravity(&mut w, Vec3::new(0.0, -9.81, 0.0));
+                    sard::physics::rigid_body::integrate_velocities(&mut w, 1.0 / 60.0);
+                    sard::physics::rigid_body::integrate_positions(&mut w, 1.0 / 60.0);
                 },
                 criterion::BatchSize::LargeInput,
             );
@@ -294,7 +294,7 @@ fn bench_pipeline(c: &mut Criterion) {
                     w
                 },
                 |mut w| {
-                    rein::physics::rigid_body::sync_transforms(&mut w);
+                    sard::physics::rigid_body::sync_transforms(&mut w);
                 },
                 criterion::BatchSize::LargeInput,
             );
@@ -404,7 +404,7 @@ fn bench_sleep_effect(c: &mut Criterion) {
 // ---------------------------------------------------------------------------
 
 fn bench_gpu_physics(c: &mut Criterion) {
-    use rein_bench::{
+    use sard_bench::{
         create_headless_context, run_gpu_mass_physics, setup_gpu_mass_scene, setup_gpu_scene,
     };
 

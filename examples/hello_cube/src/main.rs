@@ -3,7 +3,7 @@
 //! Run with: cargo run
 
 use glam::{Mat4, Vec3};
-use rein::{
+use sard::{
     screen_target, Camera, ClearState, ColorMaterial, FrameOutput, Gm, Mesh, Object, OrbitControl,
     Window, WindowSettings,
 };
@@ -62,7 +62,7 @@ fn main() -> anyhow::Result<()> {
                 ClearState::color_and_depth([0.1, 0.1, 0.1, 1.0], 1.0),
             );
             if let Some(cube) = &state.cube {
-                let lights: Vec<&dyn rein::Light> = vec![];
+                let lights: Vec<&dyn sard::Light> = vec![];
                 cube.render(frame.ctx, &state.camera, &lights, &mut pass);
             }
         }

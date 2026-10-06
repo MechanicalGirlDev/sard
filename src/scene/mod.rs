@@ -7,16 +7,16 @@
 //! viewers that rebuild hundreds of objects from telemetry every tick.
 //!
 //! ```no_run
-//! use rein::scene::{MeshAsset, MeshData, Object, OrbitCamera, Scene, SceneRenderer, Surface};
-//! use rein::glam::Vec3;
+//! use sard::scene::{MeshAsset, MeshData, Object, OrbitCamera, Scene, SceneRenderer, Surface};
+//! use sard::glam::Vec3;
 //! # fn main() -> anyhow::Result<()> {
-//! # let ctx = rein::WgpuContext::new_blocking(None)?;
+//! # let ctx = sard::WgpuContext::new_blocking(None)?;
 //! let mut scene = Scene::new_z_up();
 //! let cube = MeshAsset::shared(&ctx, MeshData::cuboid(Vec3::ONE), Some("cube"));
 //! scene.add(Object::new(cube).with_surface(Surface::rgb(0.9, 0.2, 0.2)));
 //! let mut renderer = SceneRenderer::new(&ctx, wgpu::TextureFormat::Rgba8UnormSrgb)?;
 //! let camera = OrbitCamera::new(Vec3::new(3.0, -3.0, 2.0), Vec3::ZERO, Vec3::Z);
-//! # let target = rein::scene::OffscreenTarget::new(&ctx, 64, 64, renderer.format());
+//! # let target = sard::scene::OffscreenTarget::new(&ctx, 64, 64, renderer.format());
 //! let labels = renderer.render(&ctx, &target.target(&ctx), &camera, &scene);
 //! # Ok(()) }
 //! ```

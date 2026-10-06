@@ -1,4 +1,4 @@
-//! Shared setup helpers for rein benchmarks.
+//! Shared setup helpers for sard benchmarks.
 //!
 //! ## Running
 //!
@@ -17,10 +17,10 @@
 //!   cargo bench --manifest-path benchmarks/Cargo.toml --bench physics -- gpu
 
 use glam::{Mat4, Vec3};
-use rein::ecs::components::physics::{Collider, ColliderShape, RigidBody, SleepInfo};
-use rein::ecs::components::transform::{GlobalTransform, Transform};
-use rein::physics::contact::{ContactManifold, ContactPoint};
-use rein::physics::{PhysicsConfig, PhysicsWorld};
+use sard::ecs::components::physics::{Collider, ColliderShape, RigidBody, SleepInfo};
+use sard::ecs::components::transform::{GlobalTransform, Transform};
+use sard::physics::contact::{ContactManifold, ContactPoint};
+use sard::physics::{PhysicsConfig, PhysicsWorld};
 
 // ---------------------------------------------------------------------------
 // Basic scenes
@@ -323,7 +323,7 @@ pub fn run_mass_physics(
 // GPU physics helpers
 // ---------------------------------------------------------------------------
 
-use rein::WgpuContext;
+use sard::WgpuContext;
 
 /// Create a headless WgpuContext for GPU benchmarks (no window needed).
 /// Returns Err if no GPU adapter is available.

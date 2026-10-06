@@ -8,7 +8,7 @@
 //! Run with: cargo run
 
 use glam::{Mat4, Vec3};
-use rein::{
+use sard::{
     screen_target, AmbientLight, Axes, Camera, ClearState, ColorMaterial, DirectionalLight,
     FrameOutput, Geometry, Gm, Light, LineMaterial, Mesh, Object, OrbitControl, Window,
     WindowSettings,

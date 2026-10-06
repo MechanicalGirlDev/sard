@@ -1,4 +1,4 @@
-//! Rein 3D Engine
+//! Sard 3D Engine
 //!
 //! A 3D engine built on wgpu with ECS, physics, and GPU compute.
 //!

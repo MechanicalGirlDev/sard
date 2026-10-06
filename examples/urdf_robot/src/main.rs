@@ -5,7 +5,7 @@
 //! Note: Requires a URDF file. Create a simple one or download from ROS packages.
 
 use glam::Vec3;
-use rein::{
+use sard::{
     screen_target, AmbientLight, Camera, ClearState, DirectionalLight, FrameOutput, Light,
     OrbitControl, RobotModel, Window, WindowSettings,
 };

@@ -25,7 +25,7 @@ pub struct WindowSettings {
 impl Default for WindowSettings {
     fn default() -> Self {
         Self {
-            title: "rein".to_owned(),
+            title: "sard".to_owned(),
             size: (1280, 720),
             resizable: true,
             vsync: true,

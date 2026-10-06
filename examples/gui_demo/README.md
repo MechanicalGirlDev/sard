@@ -1,6 +1,6 @@
 # gui_demo
 
-A complete showcase of the `rein::gui::UiContext` immediate-mode UI: an interactive
+A complete showcase of the `sard::gui::UiContext` immediate-mode UI: an interactive
 HUD drawn over a small rotating-cube 3D scene.
 
 ```bash
@@ -73,4 +73,4 @@ the entire workaround scaffold is gone — which is the real test that the gaps 
 - **C13 — focus polish.** Text fields focus on click and the widget-id scheme exists,
   but there is no Tab navigation / focus ring across widgets.
 - **C14 — re-export inconsistency.** `TextRenderer`/`TextBuilder` are at the crate root;
-  `UiContext`/`PrimitiveRenderer` are still only under `rein::gui::`.
+  `UiContext`/`PrimitiveRenderer` are still only under `sard::gui::`.

@@ -5,10 +5,10 @@ edition = "2021"
 
 [features]
 default = []
-gpu-physics = ["rein/gpu-physics", "rein/compute"]
+gpu-physics = ["sard/gpu-physics", "sard/compute"]
 
 [dependencies]
-rein = { path = "../..", features = ["engine", "physics"] }
+sard = { path = "../..", features = ["engine", "physics"] }
 glam = "0.33.8"
 anyhow = "1.0.104"
 hecs = "0.11.1"

@@ -1,4 +1,4 @@
-// Common shader definitions for rein
+// Common shader definitions for sard
 // This file provides shared structures and functions used across multiple shaders.
 
 // =============================================================================

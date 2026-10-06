@@ -1,11 +1,11 @@
 [package]
-name = "rein-bench"
+name = "sard-bench"
 version = "0.1.0"
 edition = "2021"
 publish = false
 
 [dependencies]
-rein = { path = "..", features = ["physics", "gpu-physics", "compute"] }
+sard = { path = "..", features = ["physics", "gpu-physics", "compute"] }
 glam = "0.33.8"
 hecs = "0.11.1"
 anyhow = "1.0.104"

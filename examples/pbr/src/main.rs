@@ -5,7 +5,7 @@
 //! Run with: cargo run
 
 use glam::Vec3;
-use rein::{
+use sard::{
     screen_target, AmbientLight, Camera, ClearState, DirectionalLight, FrameOutput, Gm, Light,
     Mesh, Object, OrbitControl, PbrMaterial, Window, WindowSettings,
 };

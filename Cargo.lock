@@ -270,7 +270,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "glam",
- "rein",
+ "sard",
 ]
 
 [[package]]
@@ -604,7 +604,7 @@ dependencies = [
  "anyhow",
  "glam",
  "hecs",
- "rein",
+ "sard",
 ]
 
 [[package]]
@@ -620,7 +620,7 @@ dependencies = [
  "anyhow",
  "glam",
  "hecs",
- "rein",
+ "sard",
 ]
 
 [[package]]
@@ -669,7 +669,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "glam",
- "rein",
+ "sard",
  "wgpu",
 ]
 
@@ -875,7 +875,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "glam",
- "rein",
+ "sard",
 ]
 
 [[package]]
@@ -940,7 +940,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "glam",
- "rein",
+ "sard",
 ]
 
 [[package]]
@@ -1001,7 +1001,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "glam",
- "rein",
+ "sard",
 ]
 
 [[package]]
@@ -1155,7 +1155,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "glam",
- "rein",
+ "sard",
 ]
 
 [[package]]
@@ -1210,7 +1210,7 @@ dependencies = [
  "anyhow",
  "glam",
  "hecs",
- "rein",
+ "sard",
 ]
 
 [[package]]
@@ -1219,7 +1219,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "glam",
- "rein",
+ "sard",
 ]
 
 [[package]]
@@ -1311,7 +1311,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "glam",
- "rein",
+ "sard",
 ]
 
 [[package]]
@@ -1708,7 +1708,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "glam",
- "rein",
+ "sard",
 ]
 
 [[package]]
@@ -1717,7 +1717,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "glam",
- "rein",
+ "sard",
 ]
 
 [[package]]
@@ -1733,7 +1733,7 @@ dependencies = [
  "anyhow",
  "glam",
  "hecs",
- "rein",
+ "sard",
 ]
 
 [[package]]
@@ -1808,7 +1808,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "glam",
- "rein",
+ "sard",
 ]
 
 [[package]]
@@ -2067,35 +2067,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d6f6ff9a378485b298a5286656da665ba74413d36db0979633275d2e708145d4"
 
 [[package]]
-name = "rein"
-version = "0.1.1"
-dependencies = [
- "anyhow",
- "bytemuck",
- "glam",
- "glyphon",
- "hecs",
- "pollster",
- "thiserror 2.0.20",
- "tracing",
- "urdf-rs",
- "wgpu",
- "winit",
-]
-
-[[package]]
-name = "rein-bench"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "criterion",
- "glam",
- "hecs",
- "iai-callgrind",
- "rein",
-]
-
-[[package]]
 name = "renderdoc-sys"
 version = "1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2167,6 +2138,35 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "93fc1dc3aaa9bfed95e02e6eadabb4baf7e3078b0bd1b4d7b6b0b68378900502"
 dependencies = [
  "winapi-util",
+]
+
+[[package]]
+name = "sard"
+version = "0.1.1"
+dependencies = [
+ "anyhow",
+ "bytemuck",
+ "glam",
+ "glyphon",
+ "hecs",
+ "pollster",
+ "thiserror 2.0.20",
+ "tracing",
+ "urdf-rs",
+ "wgpu",
+ "winit",
+]
+
+[[package]]
+name = "sard-bench"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "criterion",
+ "glam",
+ "hecs",
+ "iai-callgrind",
+ "sard",
 ]
 
 [[package]]
@@ -2267,7 +2267,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "glam",
- "rein",
+ "sard",
 ]
 
 [[package]]
@@ -2394,7 +2394,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "glam",
- "rein",
+ "sard",
 ]
 
 [[package]]
@@ -2466,7 +2466,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "glam",
- "rein",
+ "sard",
 ]
 
 [[package]]
@@ -2475,7 +2475,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "glam",
- "rein",
+ "sard",
 ]
 
 [[package]]
@@ -2685,7 +2685,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "glam",
- "rein",
+ "sard",
 ]
 
 [[package]]
@@ -3369,7 +3369,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "glam",
- "rein",
+ "sard",
 ]
 
 [[package]]

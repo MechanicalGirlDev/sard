@@ -1,4 +1,4 @@
-# rein
+# sard
 
 3D rendering library built on [wgpu](https://github.com/gfx-rs/wgpu).
 
@@ -19,7 +19,7 @@ Add to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-rein = { git = "https://github.com/NOPLAB/rein" }
+sard = "0.1.1"
 ```
 
 ### Feature Flags
@@ -46,7 +46,7 @@ The library is organized into layers:
 5. **gui** - Text rendering (optional)
 6. **urdf** - URDF robot model support
 
-Compute, ECS, physics, and the application loop are optional higher-level layers. Rein also
+Compute, ECS, physics, and the application loop are optional higher-level layers. Sard also
 provides two rendering styles: `renderer` for material-driven objects and `scene` for retained,
 telemetry-oriented scenes. See [Architecture](docs/architecture.md) for the dependency boundaries
 and guidance on choosing between them.
@@ -64,10 +64,10 @@ cargo check --workspace
 ## Example
 
 ```rust
-use rein::{Window, WindowSettings, FrameOutput};
-use rein::renderer::{Camera, OrbitControl};
-use rein::urdf::RobotModel;
-use rein::core::ClearState;
+use sard::{Window, WindowSettings, FrameOutput};
+use sard::renderer::{Camera, OrbitControl};
+use sard::urdf::RobotModel;
+use sard::core::ClearState;
 use glam::Vec3;
 
 fn main() -> anyhow::Result<()> {
@@ -86,7 +86,7 @@ fn main() -> anyhow::Result<()> {
 
 ## Acknowledgments
 
-This project is heavily inspired by [three-d](https://github.com/asny/three-d), a fantastic 3D rendering library for Rust. The architecture, API design, and many implementation patterns in rein are based on three-d's excellent work. We are deeply grateful to the three-d authors and contributors for creating such a well-designed and educational codebase.
+This project is heavily inspired by [three-d](https://github.com/asny/three-d), a fantastic 3D rendering library for Rust. The architecture, API design, and many implementation patterns in sard are based on three-d's excellent work. We are deeply grateful to the three-d authors and contributors for creating such a well-designed and educational codebase.
 
 ## License
 

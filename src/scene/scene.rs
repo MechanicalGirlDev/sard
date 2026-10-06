@@ -414,7 +414,7 @@ pub struct Scene {
     /// Lights.
     pub lighting: Lighting,
     /// World up axis (hemisphere light and grid plane). Defaults to +Y like the rest of
-    /// rein; a robotics scene sets +Z.
+    /// sard; a robotics scene sets +Z.
     pub up: Vec3,
     /// Background colour, linear RGBA.
     pub background: [f32; 4],

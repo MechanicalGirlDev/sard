@@ -5,7 +5,7 @@
 //! Run with: cargo run
 
 use glam::{Mat4, Vec3};
-use rein::{
+use sard::{
     screen_target, Camera, ClearState, FrameOutput, Gm, Mesh, Object, OrbitControl, UVMaterial,
     Window, WindowSettings,
 };
@@ -84,7 +84,7 @@ fn main() -> anyhow::Result<()> {
                 &mut encoder,
                 ClearState::color_and_depth([0.05, 0.05, 0.1, 1.0], 1.0),
             );
-            let lights: Vec<&dyn rein::Light> = vec![];
+            let lights: Vec<&dyn sard::Light> = vec![];
 
             if let Some(obj) = &state.sphere {
                 obj.render(frame.ctx, &state.camera, &lights, &mut pass);

@@ -11,12 +11,12 @@ use std::hint::black_box;
 
 use glam::{Mat4, Vec3};
 use iai_callgrind::{library_benchmark, library_benchmark_group, main};
-use rein::ecs::components::physics::ColliderShape;
-use rein::ecs::components::transform::GlobalTransform;
-use rein::physics::broadphase::SweepAndPrune;
-use rein::physics::narrowphase::{detect_collision, gjk_intersection, sat_box_box, sphere_sphere};
-use rein::physics::solver::solve_contacts;
-use rein_bench::*;
+use sard::ecs::components::physics::ColliderShape;
+use sard::ecs::components::transform::GlobalTransform;
+use sard::physics::broadphase::SweepAndPrune;
+use sard::physics::narrowphase::{detect_collision, gjk_intersection, sat_box_box, sphere_sphere};
+use sard::physics::solver::solve_contacts;
+use sard_bench::*;
 
 // ---------------------------------------------------------------------------
 // Broadphase
@@ -271,26 +271,26 @@ library_benchmark_group!(
 
 #[library_benchmark]
 fn gpu_pipeline_step_500() {
-    let ctx = rein_bench::create_headless_context().expect("GPU context");
+    let ctx = sard_bench::create_headless_context().expect("GPU context");
     let (mut world, mut physics) =
-        rein_bench::setup_gpu_scene(&ctx, black_box(500)).expect("GPU scene setup");
+        sard_bench::setup_gpu_scene(&ctx, black_box(500)).expect("GPU scene setup");
     physics.step_gpu(&mut world, 1.0 / 60.0, &ctx);
 }
 
 #[library_benchmark]
 fn gpu_pipeline_step_1000() {
-    let ctx = rein_bench::create_headless_context().expect("GPU context");
+    let ctx = sard_bench::create_headless_context().expect("GPU context");
     let (mut world, mut physics) =
-        rein_bench::setup_gpu_scene(&ctx, black_box(1000)).expect("GPU scene setup");
+        sard_bench::setup_gpu_scene(&ctx, black_box(1000)).expect("GPU scene setup");
     physics.step_gpu(&mut world, 1.0 / 60.0, &ctx);
 }
 
 #[library_benchmark]
 fn gpu_mass_physics_60frames() {
-    let ctx = rein_bench::create_headless_context().expect("GPU context");
+    let ctx = sard_bench::create_headless_context().expect("GPU context");
     let (mut world, mut physics) =
-        rein_bench::setup_gpu_mass_scene(&ctx, black_box(0)).expect("GPU mass scene");
-    rein_bench::run_gpu_mass_physics(&mut world, &mut physics, &ctx, 60, 3, 0);
+        sard_bench::setup_gpu_mass_scene(&ctx, black_box(0)).expect("GPU mass scene");
+    sard_bench::run_gpu_mass_physics(&mut world, &mut physics, &ctx, 60, 3, 0);
     black_box(&world);
 }
 

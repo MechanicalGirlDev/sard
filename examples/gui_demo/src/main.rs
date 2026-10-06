@@ -1,4 +1,4 @@
-//! GUI Demo — showcases the `rein::gui::UiContext` immediate-mode UI.
+//! GUI Demo — showcases the `sard::gui::UiContext` immediate-mode UI.
 //!
 //! An interactive HUD is drawn over a small rotating-cube 3D scene. Everything in
 //! the overlay goes through a single `UiContext`:
@@ -11,8 +11,8 @@
 //! Run with: cargo run   (do not run headless — `render_loop` blocks until close)
 
 use glam::{Mat4, Vec3};
-use rein::gui::UiContext;
-use rein::{
+use sard::gui::UiContext;
+use sard::{
     screen_target, Camera, ClearState, ColorMaterial, FrameOutput, Gm, Key, Light, Mesh, Object,
     TextBuilder, Window, WindowSettings,
 };
@@ -48,7 +48,7 @@ struct State {
 fn main() -> anyhow::Result<()> {
     let window = Window::new(
         WindowSettings::default()
-            .title("rein GUI demo")
+            .title("sard GUI demo")
             .size(1000, 720),
     )?;
 
@@ -167,7 +167,7 @@ fn main() -> anyhow::Result<()> {
 
         // Header bar.
         ui.rect(0.0, 0.0, w, 36.0, [0.10, 0.10, 0.13, 0.9]);
-        ui.label("rein GUI demo", 16.0, 10.0, [1.0, 1.0, 1.0, 1.0]);
+        ui.label("sard GUI demo", 16.0, 10.0, [1.0, 1.0, 1.0, 1.0]);
         let fps = if dt > 0.0 { 1.0 / dt } else { 0.0 };
         ui.label(
             &format!(

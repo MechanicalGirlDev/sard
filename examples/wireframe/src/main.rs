@@ -5,7 +5,7 @@
 //! Run with: cargo run
 
 use glam::{Mat4, Vec3};
-use rein::{
+use sard::{
     screen_target, Camera, ClearState, FrameOutput, Geometry, LineMaterial, LineStrip, Lines,
     OrbitControl, Window, WindowSettings,
 };

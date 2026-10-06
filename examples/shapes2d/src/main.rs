@@ -4,20 +4,20 @@
 //!
 //! Run with: cargo run
 
-use rein::{screen_target, ClearState, FrameOutput, Window, WindowSettings};
+use sard::{screen_target, ClearState, FrameOutput, Window, WindowSettings};
 
 fn main() -> anyhow::Result<()> {
     let window = Window::new(WindowSettings::default().title("2D Shapes").size(800, 600))?;
 
     struct State {
-        renderer: Option<rein::gui::PrimitiveRenderer>,
+        renderer: Option<sard::gui::PrimitiveRenderer>,
     }
 
     let state = State { renderer: None };
 
     window.render_loop(state, |state, frame| {
         if state.renderer.is_none() {
-            state.renderer = Some(rein::gui::PrimitiveRenderer::new(
+            state.renderer = Some(sard::gui::PrimitiveRenderer::new(
                 frame.ctx,
                 frame.surface_format,
             ));

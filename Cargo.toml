@@ -1,11 +1,11 @@
 [package]
-name = "rein"
+name = "sard"
 version = "0.1.1"
 edition = "2021"
-description = "rein 3D Engine"
+description = "sard 3D Engine"
 license = "MIT"
-repository = "https://github.com/NOPLAB/rein"
-keywords = ["3d", "graphics", "rendering", "wgpu", "urdf", "ecs", "physics"]
+repository = "https://github.com/MechanicalGirlDev/sard"
+keywords = ["3d", "graphics", "rendering", "wgpu", "urdf"]
 categories = ["graphics", "rendering", "game-development"]
 
 [workspace]

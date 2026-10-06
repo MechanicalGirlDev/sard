@@ -130,7 +130,7 @@ where
         .expect("Failed to find suitable GPU adapter");
 
         let (device, queue) = pollster::block_on(adapter.request_device(&wgpu::DeviceDescriptor {
-            label: Some("rein device"),
+            label: Some("sard device"),
             required_features: wgpu::Features::empty(),
             required_limits: wgpu::Limits::default(),
             memory_hints: wgpu::MemoryHints::Performance,

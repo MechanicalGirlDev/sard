@@ -5,7 +5,7 @@
 //! Run with: cargo run
 
 use glam::Vec3;
-use rein::{
+use sard::{
     Camera, ColorMaterial, DepthTexture, FogEffect, FrameOutput, Gm, Light, Mesh, Object,
     OrbitControl, Texture2D, Window, WindowSettings,
 };
