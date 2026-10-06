@@ -1,352 +1,201 @@
-//! CPU-based physics engine with rigid body simulation and collision detection.
+//! Tessera physics with an ECS-to-rendering bridge.
 //!
-//! # Architecture
-//!
-//! The physics pipeline runs in a fixed timestep loop:
-//!
-//! 1. Apply forces (gravity)
-//! 2. Integrate velocities
-//! 3. Broadphase collision detection (AABB overlap)
-//! 4. Narrowphase collision detection (GJK/EPA, SAT, specialized tests)
-//! 5. Solve contact constraints (sequential impulse)
-//! 6. Integrate positions
-//! 7. Synchronize transforms
-//! 8. Clear force accumulators
+//! Tessera owns collision detection, contact solving, integration, and sleeping.
+//! Bodies use its native Z-up coordinates and collider types. The optional GPU
+//! path uses Tessera's own compute device, independently of Sard's render device.
 
-pub mod broadphase;
-pub mod collider;
-pub mod contact;
+use std::collections::HashMap;
+
+use glam::{DQuat, DVec3, Mat4};
+use nalgebra::{Isometry3, Matrix3, Vector3};
+use tessera_physics::articulated_world::ArticulatedWorld;
+use tessera_physics::articulation::{Articulation, LinkSpec};
+
+use crate::ecs::components::physics::{ColliderMaterial, RigidBody};
+use crate::ecs::components::transform::{GlobalTransform, Transform};
+
+pub use nalgebra;
+pub use tessera_physics as tessera;
+pub use tessera_physics::articulated_world::{
+    ArticulatedWorldError as PhysicsError, ArticulatedWorldParams as PhysicsConfig, SceneCollider,
+};
 #[cfg(feature = "gpu-physics")]
-pub mod gpu;
-pub mod narrowphase;
-pub mod rigid_body;
-pub mod solver;
+pub use tessera_physics::gpu_contact_pipeline::GpuContactDevice;
 
-use glam::Vec3;
-
-use crate::ecs::components::physics::Collider;
-use crate::ecs::components::transform::GlobalTransform;
-
-use self::broadphase::SpatialHashGrid;
-use self::contact::{ContactCache, ContactManifold, ContactPoint};
-use self::narrowphase::detect_collision;
-
-/// Configuration for the physics simulation.
-#[derive(Debug, Clone)]
-pub struct PhysicsConfig {
-    /// Gravity vector. Default: (0, -9.81, 0).
-    pub gravity: Vec3,
-    /// Fixed timestep for physics updates in seconds. Default: 1/60.
-    pub fixed_timestep: f64,
-    /// Maximum number of sub-steps per frame. Default: 4.
-    pub max_substeps: u32,
-    /// Number of constraint solver iterations. Default: 8.
-    pub solver_iterations: u32,
-    /// Whether to use GPU acceleration when available. Default: false.
-    /// Requires the `gpu-physics` feature.
-    pub use_gpu: bool,
-}
-
-impl Default for PhysicsConfig {
-    fn default() -> Self {
-        Self {
-            gravity: Vec3::new(0.0, -9.81, 0.0),
-            fixed_timestep: 1.0 / 60.0,
-            max_substeps: 4,
-            solver_iterations: 8,
-            use_gpu: false,
-        }
-    }
-}
-
-/// The main physics world managing simulation state.
+/// Synchronizes native Tessera bodies with one ECS world.
+///
+/// Rigid-body poses are authoritative. `Transform` and `GlobalTransform` are
+/// optional rendering outputs, in world space; physics entities should not have
+/// an ECS parent. Shape, mass, or inertia edits recreate the corresponding
+/// Tessera body, while ordinary stepping preserves its contact and sleep state.
+#[derive(Debug)]
 pub struct PhysicsWorld {
-    config: PhysicsConfig,
-    accumulator: f64,
-    broadphase: SpatialHashGrid,
-    contacts: Vec<ContactManifold>,
-    contact_cache: ContactCache,
-    #[cfg(feature = "gpu-physics")]
-    gpu_physics: Option<gpu::GpuPhysics>,
+    tessera: ArticulatedWorld,
+    entities: Vec<hecs::Entity>,
 }
 
 impl PhysicsWorld {
-    /// Create a new physics world with the given configuration.
-    pub fn new(config: PhysicsConfig) -> Self {
-        Self {
-            config,
-            accumulator: 0.0,
-            broadphase: SpatialHashGrid::new(),
-            contacts: Vec::new(),
-            contact_cache: ContactCache::new(),
-            #[cfg(feature = "gpu-physics")]
-            gpu_physics: None,
-        }
+    /// Create a Tessera scene with a fixed inertial root and no robot joints.
+    ///
+    /// Native configuration includes a finite ground plane at Z = 0.
+    pub fn new(config: PhysicsConfig) -> Result<Self, PhysicsError> {
+        let root = Articulation::new(
+            vec![LinkSpec {
+                mass: 0.0,
+                center_of_mass: Vector3::zeros(),
+                inertia: Matrix3::zeros(),
+            }],
+            vec![],
+            0,
+        )?;
+        Ok(Self {
+            tessera: ArticulatedWorld::new(root, Isometry3::identity(), vec![], config)?,
+            entities: Vec::new(),
+        })
     }
 
-    /// Initialize GPU physics resources. Only available with the `gpu-physics` feature.
+    /// Inspect Tessera's world, including native contact and sleep diagnostics.
+    pub const fn tessera_world(&self) -> &ArticulatedWorld {
+        &self.tessera
+    }
+
+    /// Advance native CPU physics by a positive duration, then publish its poses.
     ///
-    /// Call this once after creating the physics world to enable GPU acceleration.
-    #[cfg(feature = "gpu-physics")]
-    pub fn init_gpu(
-        &mut self,
-        ctx: &crate::context::WgpuContext,
-        initial_capacity: usize,
-    ) -> anyhow::Result<()> {
-        self.gpu_physics = Some(gpu::GpuPhysics::new(ctx, initial_capacity)?);
+    /// Tessera owns timestep subdivision through `PhysicsConfig::max_substep`.
+    pub fn step(&mut self, world: &mut hecs::World, delta_time: f64) -> Result<(), PhysicsError> {
+        let slots = self.upload(world)?;
+        self.tessera.step(delta_time, &[])?;
+        self.download(world, &slots);
         Ok(())
     }
 
-    /// Get a reference to the GPU physics instance, if initialized.
-    #[cfg(feature = "gpu-physics")]
-    pub fn gpu_physics_ref(&self) -> Option<&gpu::GpuPhysics> {
-        self.gpu_physics.as_ref()
-    }
-
-    /// Step the physics simulation forward by `delta_time` seconds.
+    /// Use Tessera's GPU contact detection and solving, then publish its poses.
     ///
-    /// Uses a fixed timestep accumulator to ensure deterministic simulation.
-    pub fn step(&mut self, world: &mut hecs::World, delta_time: f64) {
-        self.accumulator += delta_time;
-
-        let mut substeps = 0_u32;
-        while self.accumulator >= self.config.fixed_timestep && substeps < self.config.max_substeps
-        {
-            self.fixed_step(world, self.config.fixed_timestep as f32);
-            self.accumulator -= self.config.fixed_timestep;
-            substeps += 1;
-        }
-
-        // Clamp accumulator to avoid spiral of death
-        if self.accumulator > self.config.fixed_timestep * f64::from(self.config.max_substeps) {
-            self.accumulator = 0.0;
-        }
-    }
-
-    /// Step the physics simulation with GPU-accelerated broadphase.
-    ///
-    /// Uses GPU compute for AABB broadphase when body count exceeds the threshold,
-    /// falling back to CPU otherwise. Requires `gpu-physics` feature and prior
-    /// call to [`init_gpu`].
+    /// GPU initialization and computation errors propagate; there is no Sard
+    /// solver or automatic switch to a CPU implementation.
     #[cfg(feature = "gpu-physics")]
     pub fn step_gpu(
         &mut self,
         world: &mut hecs::World,
         delta_time: f64,
-        ctx: &crate::context::WgpuContext,
-    ) {
-        self.accumulator += delta_time;
-
-        let mut substeps = 0_u32;
-        while self.accumulator >= self.config.fixed_timestep && substeps < self.config.max_substeps
-        {
-            self.fixed_step_gpu(world, self.config.fixed_timestep as f32, ctx);
-            self.accumulator -= self.config.fixed_timestep;
-            substeps += 1;
-        }
-
-        if self.accumulator > self.config.fixed_timestep * f64::from(self.config.max_substeps) {
-            self.accumulator = 0.0;
-        }
+        device: &GpuContactDevice,
+    ) -> Result<(), PhysicsError> {
+        let slots = self.upload(world)?;
+        self.tessera.step_gpu(delta_time, &[], device)?;
+        self.download(world, &slots);
+        Ok(())
     }
 
-    #[cfg(feature = "gpu-physics")]
-    fn fixed_step_gpu(
+    fn upload(
         &mut self,
-        world: &mut hecs::World,
-        dt: f32,
-        ctx: &crate::context::WgpuContext,
-    ) {
-        rigid_body::apply_gravity(world, self.config.gravity);
-        rigid_body::integrate_velocities(world, dt);
-
-        // Sync transforms so GPU broadphase sees current positions
-        rigid_body::sync_transforms(world);
-
-        self.contacts.clear();
-
-        if let Some(gpu) = &self.gpu_physics {
-            let (body_count, entity_map, max_extent) = gpu.upload_aabbs(ctx, world);
-            if gpu::GpuPhysics::should_use_gpu(body_count as usize) {
-                // GPU broadphase
-                let cell_size = (max_extent * 2.0).max(1.0);
-                gpu.dispatch_broadphase_with_cell_size(ctx, body_count, cell_size);
-
-                // Upload shape data for GPU narrowphase
-                gpu.upload_shapes(ctx, world, &entity_map);
-
-                // Check if all shapes are spheres (fast path: no box-box pairs possible).
-                // GPU narrowphase handles sphere-sphere, sphere-box, box-sphere but NOT box-box.
-                // Fast path avoids broadphase readback by using pair_buffer directly.
-                let all_spheres = entity_map.iter().all(|e| {
-                    world.get::<&Collider>(*e).is_ok_and(|c| {
-                        matches!(
-                            c.shape,
-                            crate::ecs::components::physics::ColliderShape::Sphere { .. }
-                        )
-                    })
+        world: &hecs::World,
+    ) -> Result<HashMap<hecs::Entity, usize>, PhysicsError> {
+        // Tessera removal shifts dense slots. Remove in reverse order, and use
+        // its API so material, sleep, and contact side tables move with bodies.
+        for index in (0..self.entities.len()).rev() {
+            let keep = world
+                .get::<&RigidBody>(self.entities[index])
+                .is_ok_and(|body| {
+                    let previous = &self.tessera.scene_bodies[index];
+                    body.mass.to_bits() == previous.mass.to_bits()
+                        && body.inertia == previous.inertia
+                        && body.colliders == previous.colliders
+                        && body.kinematic == previous.kinematic
                 });
-
-                if all_spheres {
-                    // Fast path: all sphere-sphere, skip broadphase readback
-                    let pair_count_data: Vec<u32> =
-                        crate::compute::read_buffer_sync(ctx, gpu.pair_count_buffer(), 4);
-                    let pair_count = pair_count_data
-                        .first()
-                        .copied()
-                        .unwrap_or(0)
-                        .min(gpu::MAX_PAIRS);
-
-                    gpu.dispatch_narrowphase_direct(ctx, pair_count);
-                    let gpu_results = gpu.readback_narrowphase(ctx, pair_count);
-                    Self::collect_gpu_narrowphase_results(
-                        world,
-                        &gpu_results,
-                        &entity_map,
-                        &mut self.contacts,
-                    );
-                } else {
-                    // Mixed path: readback pairs, classify per-pair, split GPU/CPU
-                    let broadphase_pairs = gpu.readback_pairs(ctx);
-                    let (gpu_np_count, cpu_pairs) =
-                        gpu.dispatch_narrowphase(ctx, &broadphase_pairs, &entity_map, world);
-
-                    if gpu_np_count > 0 {
-                        let gpu_results = gpu.readback_narrowphase(ctx, gpu_np_count);
-                        Self::collect_gpu_narrowphase_results(
-                            world,
-                            &gpu_results,
-                            &entity_map,
-                            &mut self.contacts,
-                        );
-                    }
-
-                    Self::run_cpu_narrowphase(world, &cpu_pairs, &mut self.contacts);
-                }
-            } else {
-                // Fallback to CPU
-                let pairs = self.broadphase.find_pairs(world);
-                Self::run_cpu_narrowphase(world, &pairs, &mut self.contacts);
+            if !keep {
+                self.tessera.remove_scene_body(index);
+                self.entities.remove(index);
             }
-        } else {
-            let pairs = self.broadphase.find_pairs(world);
-            Self::run_cpu_narrowphase(world, &pairs, &mut self.contacts);
         }
 
-        self.solve_and_integrate(world, dt);
-    }
-
-    fn fixed_step(&mut self, world: &mut hecs::World, dt: f32) {
-        // 1. Apply forces (gravity)
-        rigid_body::apply_gravity(world, self.config.gravity);
-
-        // 2. Integrate velocities
-        rigid_body::integrate_velocities(world, dt);
-
-        // 3. Broadphase collision detection
-        let pairs = self.broadphase.find_pairs(world);
-
-        // 4. Narrowphase collision detection
-        self.contacts.clear();
-        Self::run_cpu_narrowphase(world, &pairs, &mut self.contacts);
-
-        self.solve_and_integrate(world, dt);
-    }
-
-    /// Resolve the contacts collected by either broadphase path and finish the step.
-    fn solve_and_integrate(&mut self, world: &mut hecs::World, dt: f32) {
-        self.contact_cache.warm_start(&mut self.contacts);
-        solver::solve_contacts(&mut self.contacts, world, self.config.solver_iterations);
-        self.contact_cache.update(&self.contacts);
-        rigid_body::integrate_positions(world, dt);
-        rigid_body::sync_transforms(world);
-        rigid_body::clear_forces(world);
-        rigid_body::update_sleep_states(world, dt);
-    }
-
-    /// Collect GPU narrowphase results into contact manifolds.
-    #[cfg(feature = "gpu-physics")]
-    fn collect_gpu_narrowphase_results(
-        world: &mut hecs::World,
-        gpu_results: &[gpu::NarrowphaseResult],
-        entity_map: &[hecs::Entity],
-        contacts: &mut Vec<ContactManifold>,
-    ) {
-        for result in gpu_results {
-            let entity_a = entity_map
-                .get(result.entity_a as usize)
-                .copied()
-                .unwrap_or(hecs::Entity::DANGLING);
-            let entity_b = entity_map
-                .get(result.entity_b as usize)
-                .copied()
-                .unwrap_or(hecs::Entity::DANGLING);
-
-            rigid_body::wake_body(world, entity_a);
-            rigid_body::wake_body(world, entity_b);
-
-            contacts.push(ContactManifold {
-                entity_a,
-                entity_b,
-                normal: Vec3::from(result.normal),
-                contacts: vec![ContactPoint {
-                    position: Vec3::from(result.point),
-                    penetration: result.penetration,
-                    normal_impulse: 0.0,
-                    tangent_impulse: [0.0; 2],
-                }],
-            });
-        }
-    }
-
-    /// Run CPU narrowphase on a set of entity pairs, appending results to contacts.
-    fn run_cpu_narrowphase(
-        world: &mut hecs::World,
-        pairs: &[(hecs::Entity, hecs::Entity)],
-        contacts: &mut Vec<ContactManifold>,
-    ) {
-        for (entity_a, entity_b) in pairs {
-            let contact = {
-                let collider_a = world.get::<&Collider>(*entity_a);
-                let collider_b = world.get::<&Collider>(*entity_b);
-                let transform_a = world.get::<&GlobalTransform>(*entity_a);
-                let transform_b = world.get::<&GlobalTransform>(*entity_b);
-
-                if let (Ok(ca), Ok(cb), Ok(ta), Ok(tb)) =
-                    (collider_a, collider_b, transform_a, transform_b)
-                {
-                    let adjusted_a = if ca.offset == Vec3::ZERO {
-                        *ta
-                    } else {
-                        GlobalTransform(ta.0 * glam::Mat4::from_translation(ca.offset))
-                    };
-                    let adjusted_b = if cb.offset == Vec3::ZERO {
-                        *tb
-                    } else {
-                        GlobalTransform(tb.0 * glam::Mat4::from_translation(cb.offset))
-                    };
-
-                    detect_collision(&ca.shape, &adjusted_a, &cb.shape, &adjusted_b)
-                } else {
-                    None
+        let mut slots: HashMap<_, _> = self
+            .entities
+            .iter()
+            .enumerate()
+            .map(|(index, entity)| (*entity, index))
+            .collect();
+        let default_material = ColliderMaterial::new(
+            self.tessera.params().friction,
+            self.tessera.params().restitution,
+        );
+        for (entity, body, material) in
+            &mut world.query::<(hecs::Entity, &RigidBody, Option<&ColliderMaterial>)>()
+        {
+            let index = match slots.entry(entity) {
+                std::collections::hash_map::Entry::Occupied(entry) => {
+                    let index = *entry.get();
+                    if body.pose != self.tessera.scene_bodies[index].pose {
+                        self.tessera.set_scene_body_pose(index, body.pose)?;
+                    }
+                    let previous = &self.tessera.scene_bodies[index];
+                    if body.linear_velocity != previous.linear_velocity
+                        || body.angular_velocity != previous.angular_velocity
+                    {
+                        if body.kinematic {
+                            self.tessera.set_scene_body_kinematic_motion(
+                                index,
+                                Some((body.linear_velocity, body.angular_velocity)),
+                            )?;
+                        } else {
+                            self.tessera.set_scene_body_velocity(
+                                index,
+                                body.linear_velocity,
+                                body.angular_velocity,
+                            )?;
+                        }
+                    }
+                    // Native scene force is persistent; Tessera also owns its
+                    // validation and automatic wake behavior.
+                    self.tessera.scene_bodies[index].force = body.force;
+                    index
+                }
+                std::collections::hash_map::Entry::Vacant(entry) => {
+                    let index = self.tessera.add_scene_body(body.clone());
+                    self.entities.push(entity);
+                    entry.insert(index);
+                    index
                 }
             };
+            let material = material.copied().unwrap_or(default_material);
+            for collider in 0..body.colliders.len() {
+                if self.tessera.scene_collider_material(index, collider) != Some(material) {
+                    self.tessera
+                        .set_scene_collider_material(index, collider, material)?;
+                }
+            }
+        }
+        Ok(slots)
+    }
 
-            if let Some(info) = contact {
-                rigid_body::wake_body(world, *entity_a);
-                rigid_body::wake_body(world, *entity_b);
-
-                contacts.push(ContactManifold {
-                    entity_a: *entity_a,
-                    entity_b: *entity_b,
-                    normal: info.normal,
-                    contacts: vec![ContactPoint {
-                        position: info.point,
-                        penetration: info.penetration,
-                        normal_impulse: 0.0,
-                        tangent_impulse: [0.0; 2],
-                    }],
-                });
+    fn download(&self, world: &mut hecs::World, slots: &HashMap<hecs::Entity, usize>) {
+        for (entity, body, transform, global) in world.query_mut::<(
+            hecs::Entity,
+            &mut RigidBody,
+            Option<&mut Transform>,
+            Option<&mut GlobalTransform>,
+        )>() {
+            let solved = &self.tessera.scene_bodies[slots[&entity]];
+            body.pose = solved.pose;
+            body.linear_velocity = solved.linear_velocity;
+            body.angular_velocity = solved.angular_velocity;
+            let position = DVec3::new(
+                solved.pose.translation.x,
+                solved.pose.translation.y,
+                solved.pose.translation.z,
+            )
+            .as_vec3();
+            let quaternion = solved.pose.rotation.quaternion();
+            let rotation =
+                DQuat::from_xyzw(quaternion.i, quaternion.j, quaternion.k, quaternion.w).as_quat();
+            let matrix = if let Some(transform) = transform {
+                transform.position = position;
+                transform.rotation = rotation;
+                transform.to_matrix()
+            } else {
+                Mat4::from_rotation_translation(rotation, position)
+            };
+            if let Some(global) = global {
+                global.0 = matrix;
             }
         }
     }
@@ -355,116 +204,305 @@ impl PhysicsWorld {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ecs::components::physics::{Collider, ColliderShape, RigidBody};
-    use crate::ecs::components::transform::{GlobalTransform, Transform};
-    use glam::Mat4;
+    use glam::{Quat, Vec3};
+
+    fn sphere(position: Vector3<f64>) -> RigidBody {
+        RigidBody::new(
+            Isometry3::translation(position.x, position.y, position.z),
+            1.0,
+            Matrix3::identity(),
+            vec![SceneCollider::Sphere {
+                center: Vector3::zeros(),
+                radius: 0.5,
+            }],
+        )
+        .unwrap()
+    }
 
     #[test]
     fn test_physics_world_free_fall() {
+        // Given: a native Tessera body and rendering transforms with scale.
         let mut world = hecs::World::new();
-        let mut physics = PhysicsWorld::new(PhysicsConfig::default());
-
+        let mut physics = PhysicsWorld::new(PhysicsConfig::default()).unwrap();
         let entity = world.spawn((
-            Transform::from_position(Vec3::new(0.0, 10.0, 0.0)),
-            GlobalTransform(Mat4::from_translation(Vec3::new(0.0, 10.0, 0.0))),
-            RigidBody::new_dynamic(1.0),
-            Collider {
-                shape: ColliderShape::Sphere { radius: 0.5 },
-                offset: Vec3::ZERO,
-                is_sensor: false,
+            sphere(Vector3::new(0.0, 0.0, 10.0)),
+            Transform {
+                scale: Vec3::splat(2.0),
+                ..Transform::default()
             },
+            GlobalTransform::default(),
         ));
 
-        // Simulate ~1 second
+        // When: Tessera advances one second.
         for _ in 0..60 {
-            physics.step(&mut world, 1.0 / 60.0);
+            physics.step(&mut world, 1.0 / 60.0).unwrap();
         }
 
+        // Then: solved motion reaches both rendering components without changing scale.
+        let body = world.get::<&RigidBody>(entity).unwrap();
         let transform = world.get::<&Transform>(entity).unwrap();
-        assert!(
-            transform.position.y < 10.0,
-            "Body should have fallen: y = {}",
-            transform.position.y
-        );
+        let global = world.get::<&GlobalTransform>(entity).unwrap();
+        assert!(body.pose.translation.z < 6.0);
+        assert!(body.pose.translation.z > 4.0);
+        assert!(body.linear_velocity.z < -9.0);
+        assert!((f64::from(transform.position.z) - body.pose.translation.z).abs() < 1e-5);
+        assert_eq!(transform.scale, Vec3::splat(2.0));
+        assert_eq!(global.0, transform.to_matrix());
     }
 
     #[test]
     fn test_physics_world_collision() {
+        // Given: a box above an elevated static box, not the implicit ground.
         let mut world = hecs::World::new();
-        let config = PhysicsConfig {
-            gravity: Vec3::new(0.0, -9.81, 0.0),
-            fixed_timestep: 1.0 / 60.0,
-            max_substeps: 4,
-            solver_iterations: 8,
-            use_gpu: false,
+        let mut physics = PhysicsWorld::new(PhysicsConfig {
+            max_substep: 1.0 / 120.0,
+            ..PhysicsConfig::default()
+        })
+        .unwrap();
+        let box_shape = |half_extents| SceneCollider::Box {
+            origin: Isometry3::identity(),
+            half_extents,
         };
-        let mut physics = PhysicsWorld::new(config);
+        let dynamic = world.spawn((RigidBody::new(
+            Isometry3::translation(0.0, 0.0, 4.0),
+            1.0,
+            Matrix3::identity(),
+            vec![box_shape(Vector3::repeat(0.5))],
+        )
+        .unwrap(),));
+        let ground = world.spawn((RigidBody::new(
+            Isometry3::translation(0.0, 0.0, 1.0),
+            0.0,
+            Matrix3::zeros(),
+            vec![box_shape(Vector3::new(5.0, 5.0, 0.5))],
+        )
+        .unwrap(),));
 
-        // Dynamic box falling
-        let dynamic_entity = world.spawn((
-            Transform::from_position(Vec3::new(0.0, 2.0, 0.0)),
-            GlobalTransform(Mat4::from_translation(Vec3::new(0.0, 2.0, 0.0))),
-            RigidBody::new_dynamic(1.0),
-            Collider {
-                shape: ColliderShape::Box {
-                    half_extents: Vec3::splat(0.5),
-                },
-                offset: Vec3::ZERO,
-                is_sensor: false,
-            },
-        ));
-
-        // Static ground plane (large box at y=0)
-        world.spawn((
-            Transform::from_position(Vec3::new(0.0, -0.5, 0.0)),
-            GlobalTransform(Mat4::from_translation(Vec3::new(0.0, -0.5, 0.0))),
-            RigidBody::new_static(),
-            Collider {
-                shape: ColliderShape::Box {
-                    half_extents: Vec3::new(50.0, 0.5, 50.0),
-                },
-                offset: Vec3::ZERO,
-                is_sensor: false,
-            },
-        ));
-
-        // Simulate 3 seconds
+        // When: the native collision solver advances three seconds.
         for _ in 0..180 {
-            physics.step(&mut world, 1.0 / 60.0);
+            physics.step(&mut world, 1.0 / 60.0).unwrap();
         }
 
-        let transform = world.get::<&Transform>(dynamic_entity).unwrap();
-        let rb = world.get::<&RigidBody>(dynamic_entity).unwrap();
-
-        // The box should have fallen and been stopped by the ground
-        // It should be near y=0.5 (half the box height above the ground surface)
-        // Allow generous tolerance for solver precision
-        assert!(
-            transform.position.y > -2.0,
-            "Box should not have fallen through the ground: y = {}",
-            transform.position.y
-        );
-        assert!(
-            transform.position.y < 2.0,
-            "Box should have fallen from initial position: y = {}",
-            transform.position.y
-        );
-
-        // Velocity should be near zero (settled)
-        let speed = rb.linear_velocity.length();
-        assert!(
-            speed < 5.0,
-            "Box should have mostly settled: speed = {speed}"
+        // Then: the box rests on the explicit static body, which remains still.
+        let body = world.get::<&RigidBody>(dynamic).unwrap();
+        assert!((body.pose.translation.z - 2.0).abs() < 0.1);
+        assert!(body.linear_velocity.norm() < 0.2);
+        assert_eq!(
+            world.get::<&RigidBody>(ground).unwrap().pose.translation.z,
+            1.0
         );
     }
 
     #[test]
     fn test_physics_config_default() {
         let config = PhysicsConfig::default();
-        assert_eq!(config.gravity, Vec3::new(0.0, -9.81, 0.0));
-        assert!((config.fixed_timestep - 1.0 / 60.0).abs() < 1e-10);
-        assert_eq!(config.max_substeps, 4);
-        assert_eq!(config.solver_iterations, 8);
-        assert!(!config.use_gpu);
+        assert_eq!(config.gravity, [0.0, 0.0, -9.81]);
+        assert!((config.max_substep - 0.001).abs() < f64::EPSILON);
+        assert_eq!(config.solver_iterations, 12);
+        assert!(config.sleep.enabled);
+    }
+
+    #[test]
+    fn bridge_matches_direct_tessera_steps() {
+        // Given: identical native inputs in a direct Tessera world and the bridge.
+        let mut world = hecs::World::new();
+        let config = PhysicsConfig {
+            max_substep: 1.0 / 120.0,
+            ..PhysicsConfig::default()
+        };
+        let mut physics = PhysicsWorld::new(config).unwrap();
+        let mut direct = PhysicsWorld::new(config).unwrap().tessera;
+        let body = sphere(Vector3::new(0.0, 0.0, 2.0));
+        let entity = world.spawn((body.clone(),));
+        direct.add_scene_body(body);
+
+        // When: both paths receive the same simulation steps.
+        for _ in 0..60 {
+            physics.step(&mut world, 1.0 / 60.0).unwrap();
+            direct.step(1.0 / 60.0, &[]).unwrap();
+        }
+
+        // Then: ECS receives Tessera's exact pose and velocities.
+        assert_eq!(
+            *world.get::<&RigidBody>(entity).unwrap(),
+            direct.scene_bodies[0]
+        );
+    }
+
+    #[test]
+    fn despawn_and_shape_edits_preserve_other_entity_bindings() {
+        // Given: three distinct bodies, already registered with Tessera.
+        let mut world = hecs::World::new();
+        let mut physics = PhysicsWorld::new(PhysicsConfig {
+            gravity: [0.0; 3],
+            ..PhysicsConfig::default()
+        })
+        .unwrap();
+        let removed = world.spawn((sphere(Vector3::new(-4.0, 0.0, 3.0)),));
+        let changed = world.spawn((sphere(Vector3::new(0.0, 0.0, 3.0)),));
+        let retained = world.spawn((sphere(Vector3::new(4.0, 0.0, 3.0)),));
+        physics.step(&mut world, 0.01).unwrap();
+
+        // When: a dense slot is removed and another body's shape is replaced.
+        world.despawn(removed).unwrap();
+        world.get::<&mut RigidBody>(changed).unwrap().colliders = vec![SceneCollider::Box {
+            origin: Isometry3::identity(),
+            half_extents: Vector3::repeat(0.5),
+        }];
+        physics.step(&mut world, 0.01).unwrap();
+
+        // Then: both surviving entities still own the right native bodies.
+        assert_eq!(physics.tessera.scene_bodies.len(), 2);
+        assert_eq!(
+            world
+                .get::<&RigidBody>(retained)
+                .unwrap()
+                .pose
+                .translation
+                .x,
+            4.0
+        );
+        assert!(matches!(
+            world.get::<&RigidBody>(changed).unwrap().colliders[0],
+            SceneCollider::Box { .. }
+        ));
+    }
+
+    #[test]
+    fn material_removal_restores_the_native_default() {
+        // Given: an entity overriding Tessera's contact material.
+        let mut world = hecs::World::new();
+        let config = PhysicsConfig::default();
+        let mut physics = PhysicsWorld::new(config).unwrap();
+        let material = ColliderMaterial::new(0.2, 0.4);
+        let entity = world.spawn((sphere(Vector3::new(0.0, 0.0, 3.0)), material));
+        physics.step(&mut world, 0.01).unwrap();
+        assert_eq!(
+            physics.tessera.scene_collider_material(0, 0),
+            Some(material)
+        );
+
+        // When: the ECS override is removed.
+        world.remove_one::<ColliderMaterial>(entity).unwrap();
+        physics.step(&mut world, 0.01).unwrap();
+
+        // Then: Tessera's previous override does not leak into later steps.
+        assert_eq!(
+            physics.tessera.scene_collider_material(0, 0),
+            Some(ColliderMaterial::new(config.friction, config.restitution))
+        );
+    }
+
+    #[test]
+    fn externally_changed_velocity_wakes_a_sleeping_native_body() {
+        // Given: a sleeping native body away from any contact.
+        let mut world = hecs::World::new();
+        let mut physics = PhysicsWorld::new(PhysicsConfig {
+            gravity: [0.0; 3],
+            ..PhysicsConfig::default()
+        })
+        .unwrap();
+        let entity = world.spawn((sphere(Vector3::new(0.0, 0.0, 3.0)),));
+        physics.step(&mut world, 0.01).unwrap();
+        physics.tessera.sleep_scene_body(0).unwrap();
+
+        // When: ECS requests motion below the automatic wake threshold.
+        world
+            .get::<&mut RigidBody>(entity)
+            .unwrap()
+            .linear_velocity
+            .x = 0.001;
+        physics.step(&mut world, 0.01).unwrap();
+
+        // Then: the native setter wakes the body and its pose advances.
+        assert_eq!(physics.tessera.scene_body_is_sleeping(0), Some(false));
+        assert!(world.get::<&RigidBody>(entity).unwrap().pose.translation.x > 0.0);
+    }
+
+    #[test]
+    fn native_static_velocity_edits_propagate_tessera_error() {
+        // Given: a stationary native scene body already registered in Tessera.
+        let mut world = hecs::World::new();
+        let mut physics = PhysicsWorld::new(PhysicsConfig::default()).unwrap();
+        let body = RigidBody::new(
+            Isometry3::translation(0.0, 0.0, 3.0),
+            0.0,
+            Matrix3::zeros(),
+            vec![SceneCollider::Sphere {
+                center: Vector3::zeros(),
+                radius: 0.5,
+            }],
+        )
+        .unwrap();
+        let entity = world.spawn((body,));
+        physics.step(&mut world, 0.01).unwrap();
+
+        // When: ECS requests dynamic velocity without opting into kinematic motion.
+        world
+            .get::<&mut RigidBody>(entity)
+            .unwrap()
+            .linear_velocity
+            .x = 1.0;
+        let result = physics.step(&mut world, 0.01);
+
+        // Then: native input rejection is returned, not silently discarded.
+        assert!(matches!(result, Err(PhysicsError::InvalidInput)));
+    }
+
+    #[test]
+    fn native_pose_edits_publish_rotation_without_a_local_transform() {
+        // Given: a body with only a world rendering transform.
+        let mut world = hecs::World::new();
+        let mut physics = PhysicsWorld::new(PhysicsConfig {
+            gravity: [0.0; 3],
+            ..PhysicsConfig::default()
+        })
+        .unwrap();
+        let entity = world.spawn((
+            sphere(Vector3::new(0.0, 0.0, 3.0)),
+            GlobalTransform::default(),
+        ));
+        physics.step(&mut world, 0.01).unwrap();
+
+        // When: its native pose is externally changed.
+        world.get::<&mut RigidBody>(entity).unwrap().pose =
+            Isometry3::new(Vector3::new(2.0, 1.0, 3.0), Vector3::z() * 0.5);
+        physics.step(&mut world, 0.01).unwrap();
+
+        // Then: the rendering matrix includes both the new translation and rotation.
+        let expected =
+            Mat4::from_rotation_translation(Quat::from_rotation_z(0.5), Vec3::new(2.0, 1.0, 3.0));
+        assert!(world
+            .get::<&GlobalTransform>(entity)
+            .unwrap()
+            .0
+            .abs_diff_eq(expected, 1e-5));
+    }
+
+    #[cfg(feature = "gpu-physics")]
+    #[test]
+    fn tessera_gpu_contacts_support_a_body_against_gravity() {
+        // Given: a real Tessera compute device and a sphere above its ground.
+        let device = GpuContactDevice::new().unwrap();
+        eprintln!("Tessera GPU adapter: {:?}", device.adapter_info());
+        let mut world = hecs::World::new();
+        let mut physics = PhysicsWorld::new(PhysicsConfig {
+            max_substep: 1.0 / 60.0,
+            ..PhysicsConfig::default()
+        })
+        .unwrap();
+        let entity = world.spawn((sphere(Vector3::new(0.0, 0.0, 1.0)), Transform::default()));
+
+        // When: real GPU collision detection and solving advance two seconds.
+        for _ in 0..120 {
+            physics.step_gpu(&mut world, 1.0 / 60.0, &device).unwrap();
+        }
+
+        // Then: native contacts stop the fall and the rendering pose follows.
+        let body = world.get::<&RigidBody>(entity).unwrap();
+        assert!((body.pose.translation.z - 0.5).abs() < 0.1);
+        assert!(body.linear_velocity.norm() < 0.2);
+        let transform = world.get::<&Transform>(entity).unwrap();
+        assert!((f64::from(transform.position.z) - body.pose.translation.z).abs() < 1e-5);
     }
 }

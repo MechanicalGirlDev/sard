@@ -5,7 +5,7 @@ edition = "2021"
 
 [features]
 default = []
-gpu-physics = ["sard/gpu-physics", "sard/compute"]
+gpu-physics = ["sard/gpu-physics"]
 
 [dependencies]
 sard = { path = "../..", features = ["engine", "physics"] }

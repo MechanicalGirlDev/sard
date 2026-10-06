@@ -34,11 +34,15 @@ jobs:
   test:
     name: Test
     runs-on: ubuntu-latest
+    env:
+      TESSERA_ALLOW_SOFTWARE_ADAPTER: "1"
     steps:
       - uses: actions/checkout@v6
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
-      - run: cargo test --lib --all-features
+      - name: Install Vulkan software compute driver
+        run: sudo apt-get update && sudo apt-get install -y mesa-vulkan-drivers
+      - run: cargo test --lib --all-features -- --test-threads=1
 
   check-features:
     name: Check feature combinations

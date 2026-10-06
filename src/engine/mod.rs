@@ -48,13 +48,15 @@ pub struct SystemContext<'a> {
 /// with automatic ECS system scheduling.
 pub trait App {
     /// Called once on the first frame. Set up ECS world and load resources.
-    fn init(&mut self, ctx: &WgpuContext, world: &mut hecs::World);
+    fn init(&mut self, ctx: &WgpuContext, world: &mut hecs::World) -> anyhow::Result<()>;
 
     /// Called each frame (variable timestep). Handle input and game logic.
-    fn update(&mut self, world: &mut hecs::World, ctx: &SystemContext);
+    fn update(&mut self, world: &mut hecs::World, ctx: &SystemContext) -> anyhow::Result<()>;
 
     /// Called at fixed timestep intervals. Use for physics logic. Optional.
-    fn fixed_update(&mut self, _world: &mut hecs::World, _dt: f32) {}
+    fn fixed_update(&mut self, _world: &mut hecs::World, _dt: f64) -> anyhow::Result<()> {
+        Ok(())
+    }
 
     /// Called after rendering. Use for GUI and debug overlays. Optional.
     fn post_render(&mut self, _world: &mut hecs::World, _ctx: &SystemContext) {}
@@ -74,6 +76,9 @@ pub fn run_app<A: App + 'static>(
     config: GameLoopConfig,
     app: A,
 ) -> anyhow::Result<()> {
+    use std::cell::Cell;
+    use std::rc::Rc;
+
     use crate::core::ClearState;
     use crate::ecs::systems::{culling_system, render_system, transform_system};
     use crate::window::{screen_target, FrameOutput, Window};
@@ -96,57 +101,72 @@ pub fn run_app<A: App + 'static>(
         accumulator: 0.0,
     };
 
-    window.render_loop(state, |state, frame| {
-        let ctx = frame.ctx;
+    let failure = Rc::new(Cell::new(None));
+    let callback_failure = Rc::clone(&failure);
+    window.render_loop(state, move |state, frame| {
+        let result = (|| -> anyhow::Result<FrameOutput> {
+            let ctx = frame.ctx;
 
-        // Initialize on first frame (GPU context is now available)
-        if !state.initialized {
-            state.app.init(ctx, &mut state.world);
-            state.initialized = true;
+            // Initialize on first frame (GPU context is now available)
+            if !state.initialized {
+                state.app.init(ctx, &mut state.world)?;
+                state.initialized = true;
+            }
+
+            // Fixed timestep loop
+            state.accumulator += frame.delta_time;
+            let mut substeps = 0_u32;
+            while state.accumulator >= state.config.fixed_timestep
+                && substeps < state.config.max_substeps
+            {
+                state
+                    .app
+                    .fixed_update(&mut state.world, state.config.fixed_timestep)?;
+                state.accumulator -= state.config.fixed_timestep;
+                substeps += 1;
+            }
+
+            // Variable timestep update
+            let sys_ctx = SystemContext {
+                ctx,
+                delta_time: frame.delta_time,
+                fixed_delta_time: state.config.fixed_timestep,
+                elapsed_time: frame.elapsed_time,
+                viewport: frame.viewport,
+                events: &frame.events,
+                surface_format: frame.surface_format,
+            };
+            state.app.update(&mut state.world, &sys_ctx)?;
+
+            // ECS systems
+            transform_system(&mut state.world);
+            culling_system(&mut state.world);
+
+            // Rendering
+            let target = screen_target(&frame);
+            let mut encoder = ctx.create_encoder(Some("engine frame"));
+            {
+                let clear = ClearState::color_and_depth([0.1, 0.1, 0.1, 1.0], 1.0);
+                let mut pass = target.begin_render_pass(&mut encoder, clear);
+                render_system(&state.world, ctx, &mut pass);
+            }
+            ctx.submit([encoder.finish()]);
+
+            // Post-render
+            state.app.post_render(&mut state.world, &sys_ctx);
+
+            Ok(FrameOutput::default())
+        })();
+        match result {
+            Ok(output) => output,
+            Err(error) => {
+                callback_failure.set(Some(error));
+                FrameOutput::exit()
+            }
         }
-
-        // Fixed timestep loop
-        state.accumulator += frame.delta_time;
-        let mut substeps = 0_u32;
-        while state.accumulator >= state.config.fixed_timestep
-            && substeps < state.config.max_substeps
-        {
-            state
-                .app
-                .fixed_update(&mut state.world, state.config.fixed_timestep as f32);
-            state.accumulator -= state.config.fixed_timestep;
-            substeps += 1;
-        }
-
-        // Variable timestep update
-        let sys_ctx = SystemContext {
-            ctx,
-            delta_time: frame.delta_time,
-            fixed_delta_time: state.config.fixed_timestep,
-            elapsed_time: frame.elapsed_time,
-            viewport: frame.viewport,
-            events: &frame.events,
-            surface_format: frame.surface_format,
-        };
-        state.app.update(&mut state.world, &sys_ctx);
-
-        // ECS systems
-        transform_system(&mut state.world);
-        culling_system(&mut state.world);
-
-        // Rendering
-        let target = screen_target(&frame);
-        let mut encoder = ctx.create_encoder(Some("engine frame"));
-        {
-            let clear = ClearState::color_and_depth([0.1, 0.1, 0.1, 1.0], 1.0);
-            let mut pass = target.begin_render_pass(&mut encoder, clear);
-            render_system(&state.world, ctx, &mut pass);
-        }
-        ctx.submit([encoder.finish()]);
-
-        // Post-render
-        state.app.post_render(&mut state.world, &sys_ctx);
-
-        FrameOutput::default()
-    })
+    })?;
+    match failure.take() {
+        Some(error) => Err(error),
+        None => Ok(()),
+    }
 }

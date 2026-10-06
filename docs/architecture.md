@@ -8,7 +8,7 @@ Sard is a layered library. Dependencies should point downward through this list:
 4. `renderer` provides material-driven geometry, lighting, cameras, and controls.
 5. `scene` provides a retained scene optimized for telemetry viewers.
 6. `ecs` bridges renderer resources into hecs components and systems.
-7. `physics` operates on ECS rigid bodies and colliders, with optional GPU acceleration.
+7. `physics` bridges native Tessera rigid bodies to ECS rendering transforms.
 8. `window`, `gui`, and `engine` provide application-facing integration.
 9. `urdf` loads robot models into renderer or ECS-facing representations.
 
@@ -30,7 +30,23 @@ being duplicated between `renderer` and `scene`.
 - `src/` contains the published `sard` library.
 - `examples/*` are runnable workspace packages and share the root `Cargo.lock`.
 - `benchmarks/` is the `sard-bench` workspace package.
-- `src/shaders/` contains runtime-compiled WGSL, grouped by general, effect, and compute usage.
+- `src/shaders/` contains rendering/effect WGSL; physics shaders belong to Tessera.
 
 Workspace packages deliberately use one dependency resolution so examples exercise the same wgpu
 stack as the library.
+
+## Physics boundary
+
+Tessera owns collision geometry, broadphase, narrowphase, contacts, integration, and sleeping.
+Sard's physics module only tracks ECS entity-to-Tessera scene-body slots, forwards external
+state/material edits through native APIs, and publishes native poses for rendering.
+Topology changes use Tessera's add/remove APIs to preserve its parallel state tables.
+Unchanged bodies retain native contact caches and sleep state across frames.
+
+Rigid-body components are native `SceneBody` values and authoritative in world space.
+The bridge does not infer colliders or physical scaling from rendering transforms.
+Native configuration and collider types replace Sard's former solver-specific API.
+
+The optional `gpu-physics` feature enables Tessera's `gpu-contact` dependency feature.
+Its owned compute device is independent of Sard's renderer because the libraries currently
+use different wgpu versions. No Sard solver or physics shader remains as a fallback.

@@ -12,6 +12,7 @@
 - **URDF support** - Load robot models from URDF files
 - **Text rendering** - Optional GUI text rendering with glyphon
 - **Instanced rendering** - Efficient rendering of many identical objects
+- **Tessera physics** - Optional native rigid bodies, contacts, and GPU contact solving
 
 ## Installation
 
@@ -30,8 +31,8 @@ sard = "0.1.1"
 | `gui`    | No      | Text rendering with glyphon |
 | `compute` | No     | GPU compute dispatch and readback utilities |
 | `ecs` | No | hecs components and rendering systems |
-| `physics` | No | CPU rigid-body simulation; enables `ecs` |
-| `gpu-physics` | No | GPU-assisted physics; enables `physics` |
+| `physics` | No | Tessera CPU physics and ECS pose synchronization; enables `ecs` |
+| `gpu-physics` | No | Tessera GPU contact detection and solving; enables `physics` |
 | `engine` | No | ECS game loop; enables `ecs` and `window` |
 | `full` | No | Engine, physics, GPU physics, and GUI |
 
@@ -50,6 +51,34 @@ Compute, ECS, physics, and the application loop are optional higher-level layers
 provides two rendering styles: `renderer` for material-driven objects and `scene` for retained,
 telemetry-oriented scenes. See [Architecture](docs/architecture.md) for the dependency boundaries
 and guidance on choosing between them.
+
+### Physics
+
+Physics is provided by [Tessera](https://github.com/MechanicalGirlDev/tessera),
+pinned to Git revision `9fea04efe38d9eb02541057962848532e755b3e4`.
+Sard contains no collision detector, contact solver, integrator, or physics compute shader.
+Its `PhysicsWorld` only registers native Tessera `SceneBody` ECS components, steps Tessera,
+and copies solved poses into optional rendering transforms.
+
+`PhysicsConfig` is Tessera's `ArticulatedWorldParams`; its default world is Z-up with a
+finite ground at Z = 0. `RigidBody` is its `SceneBody`, which owns colliders, mass, inertia,
+velocities, force, and pose. Edit the body's native pose to teleport it. `ColliderMaterial`
+is an optional ECS component applied to that body's colliders. Physics entities use
+world-space transforms and should not have an ECS parent.
+
+The previous Sard collider, sensor, damping, torque-accumulator, solver, and GPU-initialization
+APIs have been removed. Use native types through `sard::physics::tessera` and
+`sard::physics::nalgebra`. Tessera's scene bodies do not currently expose trigger sensors,
+external torque, or damping. Native collision geometry includes spheres, boxes, capsules,
+cylinders, and prepared convex hulls, including body-local offsets and rotations.
+
+GPU physics requires an owned `sard::physics::GpuContactDevice`; it does not reuse Sard's
+render device because Tessera currently uses wgpu 28 while rendering uses wgpu 30.
+Device and simulation errors propagate, without a Sard CPU fallback. This Tessera path
+uses GPU contact detection and solving with CPU world preparation and pose integration.
+App `init`, `update`, and `fixed_update` callbacks return `anyhow::Result<()>`; `run_app`
+exits and returns callback errors rather than continuing after failed physics. Physics demos
+step Tessera in the engine's bounded fixed-update loop, using durations in `f64` seconds.
 
 ## Examples
 

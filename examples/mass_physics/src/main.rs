@@ -5,14 +5,18 @@
 
 use std::sync::Arc;
 
-use glam::{Mat4, Vec3};
-use sard::ecs::components::physics::{Collider, ColliderShape, RigidBody};
+use glam::{Mat4, Quat, Vec3};
+use sard::ecs::components::physics::RigidBody;
 use sard::ecs::components::rendering::{
     CameraComponent, FrustumCullable, LightComponent, MaterialHandle, MeshHandle, MeshRenderer,
     Visible,
 };
 use sard::ecs::components::transform::{GlobalTransform, Transform};
 use sard::engine::{run_app, App, GameLoopConfig, SystemContext};
+use sard::physics::nalgebra::{Isometry3, Matrix3, Vector3};
+use sard::physics::tessera::articulated_world::SceneCollider;
+#[cfg(feature = "gpu-physics")]
+use sard::physics::GpuContactDevice;
 use sard::physics::{PhysicsConfig, PhysicsWorld};
 use sard::renderer::light::LightType;
 use sard::{Camera, ColorMaterial, Mesh, WgpuContext, WindowSettings};
@@ -31,18 +35,22 @@ struct MassPhysicsApp {
     cube_mesh: Option<Arc<dyn sard::Geometry + Send + Sync>>,
     sphere_mesh: Option<Arc<dyn sard::Geometry + Send + Sync>>,
     #[cfg(feature = "gpu-physics")]
-    gpu_initialized: bool,
+    gpu_device: GpuContactDevice,
 }
 
 impl App for MassPhysicsApp {
-    fn init(&mut self, _ctx: &WgpuContext, world: &mut hecs::World) {
-        self.physics_world = Some(PhysicsWorld::new(PhysicsConfig::default()));
+    fn init(&mut self, _ctx: &WgpuContext, world: &mut hecs::World) -> anyhow::Result<()> {
+        self.physics_world = Some(PhysicsWorld::new(PhysicsConfig {
+            ground_half_extent: 20.0,
+            max_substep: 1.0 / 120.0,
+            ..PhysicsConfig::default()
+        })?);
 
         // Camera
         let camera = Camera::new_perspective(
-            Vec3::new(20.0, 25.0, 30.0),
-            Vec3::new(0.0, 5.0, 0.0),
-            Vec3::Y,
+            Vec3::new(20.0, 30.0, 25.0),
+            Vec3::new(0.0, 0.0, 5.0),
+            Vec3::Z,
             45.0,
             1.0,
             0.1,
@@ -59,7 +67,7 @@ impl App for MassPhysicsApp {
 
         // Directional light
         world.spawn((
-            Transform::from_position(Vec3::new(10.0, 20.0, 10.0)),
+            Transform::from_position(Vec3::new(10.0, 10.0, 20.0)),
             GlobalTransform::default(),
             LightComponent {
                 light_type: LightType::Directional,
@@ -67,31 +75,28 @@ impl App for MassPhysicsApp {
                 intensity: 1.0,
             },
         ));
+        Ok(())
     }
 
-    fn update(&mut self, world: &mut hecs::World, ctx: &SystemContext) {
+    fn update(&mut self, world: &mut hecs::World, ctx: &SystemContext) -> anyhow::Result<()> {
         // First frame: spawn ground + init shared meshes
         if !self.ground_spawned {
-            self.spawn_ground(world, ctx);
-            self.cube_mesh = Some(Arc::new(Mesh::cube(ctx.ctx, 0.8, [0.8, 0.4, 0.3])));
-            self.sphere_mesh = Some(Arc::new(Mesh::sphere(ctx.ctx, 0.4, 12, 8, [0.3, 0.5, 0.8])));
+            self.spawn_ground(world, ctx)?;
             self.ground_spawned = true;
         }
 
-        // Initialize GPU physics on first frame (needs WgpuContext from SystemContext)
-        #[cfg(feature = "gpu-physics")]
-        if !self.gpu_initialized {
-            if let Some(physics) = &mut self.physics_world {
-                physics
-                    .init_gpu(ctx.ctx, 4096)
-                    .expect("Failed to init GPU physics");
-            }
-            self.gpu_initialized = true;
-        }
+        let cube_mesh = Arc::clone(
+            self.cube_mesh
+                .get_or_insert_with(|| Arc::new(Mesh::cube(ctx.ctx, 0.8, [0.8, 0.4, 0.3]))),
+        );
+        let sphere_mesh =
+            Arc::clone(self.sphere_mesh.get_or_insert_with(|| {
+                Arc::new(Mesh::sphere(ctx.ctx, 0.4, 12, 8, [0.3, 0.5, 0.8]))
+            }));
 
         // Spawn a few objects each frame
         for _ in 0..SPAWN_PER_FRAME {
-            self.spawn_object(world, ctx);
+            self.spawn_object(world, ctx, &cube_mesh, &sphere_mesh)?;
         }
 
         // Update camera viewport
@@ -101,30 +106,39 @@ impl App for MassPhysicsApp {
             }
         }
 
-        // Step physics (GPU or CPU)
+        Ok(())
+    }
+
+    fn fixed_update(&mut self, world: &mut hecs::World, dt: f64) -> anyhow::Result<()> {
         if let Some(physics) = &mut self.physics_world {
             #[cfg(feature = "gpu-physics")]
             {
-                physics.step_gpu(world, ctx.delta_time, ctx.ctx);
+                physics.step_gpu(world, dt, &self.gpu_device)?;
             }
             #[cfg(not(feature = "gpu-physics"))]
             {
-                physics.step(world, ctx.delta_time);
+                physics.step(world, dt)?;
             }
         }
+        Ok(())
     }
 }
 
 impl MassPhysicsApp {
-    fn spawn_ground(&self, world: &mut hecs::World, ctx: &SystemContext) {
-        let ground_material = ColorMaterial::new(ctx.ctx, ctx.surface_format)
-            .expect("Failed to create ground material");
+    fn spawn_ground(&self, world: &mut hecs::World, ctx: &SystemContext) -> anyhow::Result<()> {
+        let ground_material = ColorMaterial::new(ctx.ctx, ctx.surface_format)?;
         let ground_mesh = Mesh::quad(ctx.ctx, 40.0, 40.0, [0.35, 0.45, 0.35]);
-        let ground_pos = Vec3::ZERO;
+        // Render Tessera's implicit finite ground at z=0.
+        let ground_transform = Transform {
+            rotation: Quat::from_rotation_x(std::f32::consts::FRAC_PI_2),
+            // Quad winding opposes its +Y normal; mirror X so the +Z face is visible.
+            scale: Vec3::new(-1.0, 1.0, 1.0),
+            ..Transform::identity()
+        };
 
         world.spawn((
-            Transform::from_position(ground_pos),
-            GlobalTransform(Mat4::from_translation(ground_pos)),
+            ground_transform,
+            GlobalTransform(ground_transform.to_matrix()),
             MeshRenderer {
                 mesh: MeshHandle(Arc::new(ground_mesh)),
                 material: MaterialHandle(Arc::new(ground_material)),
@@ -134,18 +148,17 @@ impl MassPhysicsApp {
             },
             FrustumCullable,
             Visible,
-            RigidBody::new_static(),
-            Collider {
-                shape: ColliderShape::Box {
-                    half_extents: Vec3::new(20.0, 5.0, 20.0),
-                },
-                offset: Vec3::new(0.0, -5.0, 0.0),
-                is_sensor: false,
-            },
         ));
+        Ok(())
     }
 
-    fn spawn_object(&mut self, world: &mut hecs::World, ctx: &SystemContext) {
+    fn spawn_object(
+        &mut self,
+        world: &mut hecs::World,
+        ctx: &SystemContext,
+        cube_mesh: &Arc<dyn sard::Geometry + Send + Sync>,
+        sphere_mesh: &Arc<dyn sard::Geometry + Send + Sync>,
+    ) -> anyhow::Result<()> {
         let i = self.spawned_count;
         let is_sphere = i.is_multiple_of(2);
 
@@ -154,26 +167,37 @@ impl MassPhysicsApp {
         let height_jitter = (i % 5) as f32 * 0.6;
         let pos = Vec3::new(
             r * angle.cos(),
-            SPAWN_HEIGHT + height_jitter,
             r * angle.sin(),
+            SPAWN_HEIGHT + height_jitter,
         );
 
-        let material =
-            ColorMaterial::new(ctx.ctx, ctx.surface_format).expect("Failed to create material");
+        let material = ColorMaterial::new(ctx.ctx, ctx.surface_format)?;
 
-        let (mesh, collider_shape) = if is_sphere {
+        let (mesh, collider, inertia) = if is_sphere {
             (
-                MeshHandle(Arc::clone(self.sphere_mesh.as_ref().unwrap())),
-                ColliderShape::Sphere { radius: 0.4 },
+                MeshHandle(Arc::clone(sphere_mesh)),
+                SceneCollider::Sphere {
+                    center: Vector3::zeros(),
+                    radius: 0.4,
+                },
+                Matrix3::identity() * (2.0 / 5.0 * 0.4 * 0.4),
             )
         } else {
             (
-                MeshHandle(Arc::clone(self.cube_mesh.as_ref().unwrap())),
-                ColliderShape::Box {
-                    half_extents: Vec3::splat(0.4),
+                MeshHandle(Arc::clone(cube_mesh)),
+                SceneCollider::Box {
+                    origin: Isometry3::identity(),
+                    half_extents: Vector3::repeat(0.4),
                 },
+                Matrix3::identity() * (0.8 * 0.8 / 6.0),
             )
         };
+        let body = RigidBody::new(
+            Isometry3::translation(f64::from(pos.x), f64::from(pos.y), f64::from(pos.z)),
+            1.0,
+            inertia,
+            vec![collider],
+        )?;
 
         world.spawn((
             Transform::from_position(pos),
@@ -187,26 +211,24 @@ impl MassPhysicsApp {
             },
             FrustumCullable,
             Visible,
-            RigidBody::new_dynamic(1.0),
-            Collider {
-                shape: collider_shape,
-                offset: Vec3::ZERO,
-                is_sensor: false,
-            },
+            body,
         ));
 
         self.spawned_count += 1;
+        Ok(())
     }
 }
 
 fn main() -> anyhow::Result<()> {
     let title = if cfg!(feature = "gpu-physics") {
-        "Mass Physics Demo (GPU Broadphase)"
+        "Mass Physics Demo (Tessera GPU)"
     } else {
         "Mass Physics Demo (CPU)"
     };
     let settings = WindowSettings::default().title(title);
     let config = GameLoopConfig::default();
+    #[cfg(feature = "gpu-physics")]
+    let gpu_device = GpuContactDevice::new()?;
     let app = MassPhysicsApp {
         physics_world: None,
         ground_spawned: false,
@@ -214,7 +236,7 @@ fn main() -> anyhow::Result<()> {
         cube_mesh: None,
         sphere_mesh: None,
         #[cfg(feature = "gpu-physics")]
-        gpu_initialized: false,
+        gpu_device,
     };
     run_app(settings, config, app)
 }

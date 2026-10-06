@@ -1,368 +1,193 @@
-//! Shared setup helpers for sard benchmarks.
+//! Shared native Tessera fixtures for wall-clock and instruction-count benchmarks.
 //!
-//! ## Running
-//!
-//! CPU physics (criterion):
-//!   cargo bench --manifest-path benchmarks/Cargo.toml --bench physics
-//!
-//! GPU physics (criterion):
-//!   cargo bench --manifest-path benchmarks/Cargo.toml --bench physics --features gpu-physics
-//!
-//! iai-callgrind (instruction counts, requires valgrind):
-//!   cargo install iai-callgrind-runner
-//!   cargo bench --manifest-path benchmarks/Cargo.toml --bench physics_iai
-//!
-//! Filter by group:
-//!   cargo bench --manifest-path benchmarks/Cargo.toml --bench physics -- broadphase
-//!   cargo bench --manifest-path benchmarks/Cargo.toml --bench physics -- gpu
+//! CPU: cargo bench -p sard-bench --bench physics
+//! GPU: cargo bench -p sard-bench --bench physics --features gpu-physics -- gpu
+//! IAI: cargo bench -p sard-bench --bench physics_iai
+//! IAI requires iai-callgrind-runner and Valgrind. Its optional GPU cases count
+//! host instructions, including device setup; Criterion measures GPU wall time.
 
-use glam::{Mat4, Vec3};
-use sard::ecs::components::physics::{Collider, ColliderShape, RigidBody, SleepInfo};
-use sard::ecs::components::transform::{GlobalTransform, Transform};
-use sard::physics::contact::{ContactManifold, ContactPoint};
+use sard::ecs::components::physics::RigidBody;
+use sard::physics::nalgebra::{Isometry3, Matrix3, Vector3};
+use sard::physics::tessera::articulated_world::SceneCollider;
 use sard::physics::{PhysicsConfig, PhysicsWorld};
 
-// ---------------------------------------------------------------------------
-// Basic scenes
-// ---------------------------------------------------------------------------
+pub const DT: f64 = 1.0 / 60.0;
 
-/// Spawn `n` dynamic sphere bodies in a grid layout so roughly half overlap.
-pub fn setup_sphere_world(n: usize) -> hecs::World {
-    let mut world = hecs::World::new();
-    let cols = (n as f32).sqrt().ceil() as usize;
-
-    for i in 0..n {
-        let x = (i % cols) as f32 * 1.5;
-        let z = (i / cols) as f32 * 1.5;
-        let pos = Vec3::new(x, 0.0, z);
-
-        world.spawn((
-            Transform::from_position(pos),
-            GlobalTransform(Mat4::from_translation(pos)),
-            RigidBody::new_dynamic(1.0),
-            Collider {
-                shape: ColliderShape::Sphere { radius: 1.0 },
-                offset: Vec3::ZERO,
-                is_sensor: false,
-            },
-        ));
-    }
-    world
+#[derive(Clone, Copy, Debug)]
+pub enum Scene {
+    Spheres,
+    Mixed,
+    Sparse,
+    Falling,
+    Stack,
+    Mass,
 }
 
-/// Mixed scene: half dynamic spheres, half static boxes.
-pub fn setup_mixed_world(n: usize) -> hecs::World {
-    let mut world = hecs::World::new();
-    let cols = (n as f32).sqrt().ceil() as usize;
-
-    for i in 0..n {
-        let x = (i % cols) as f32 * 1.5;
-        let z = (i / cols) as f32 * 1.5;
-        let pos = Vec3::new(x, 0.0, z);
-
-        if i % 2 == 0 {
-            world.spawn((
-                Transform::from_position(pos),
-                GlobalTransform(Mat4::from_translation(pos)),
-                RigidBody::new_dynamic(1.0),
-                Collider {
-                    shape: ColliderShape::Sphere { radius: 1.0 },
-                    offset: Vec3::ZERO,
-                    is_sensor: false,
-                },
-            ));
-        } else {
-            world.spawn((
-                Transform::from_position(pos),
-                GlobalTransform(Mat4::from_translation(pos)),
-                RigidBody::new_static(),
-                Collider {
-                    shape: ColliderShape::Box {
-                        half_extents: Vec3::splat(0.5),
-                    },
-                    offset: Vec3::ZERO,
-                    is_sensor: false,
-                },
-            ));
-        }
-    }
-    world
-}
-
-/// Sparse scene: bodies spread far apart (no overlaps).
-pub fn setup_sparse_world(n: usize) -> hecs::World {
-    let mut world = hecs::World::new();
-    let cols = (n as f32).sqrt().ceil() as usize;
-
-    for i in 0..n {
-        let x = (i % cols) as f32 * 10.0;
-        let z = (i / cols) as f32 * 10.0;
-        let pos = Vec3::new(x, 0.0, z);
-
-        world.spawn((
-            Transform::from_position(pos),
-            GlobalTransform(Mat4::from_translation(pos)),
-            RigidBody::new_dynamic(1.0),
-            Collider {
-                shape: ColliderShape::Sphere { radius: 0.5 },
-                offset: Vec3::ZERO,
-                is_sensor: false,
+fn spawn_body(
+    world: &mut hecs::World,
+    position: Vector3<f64>,
+    sphere: bool,
+    size: f64,
+    mass: f64,
+) -> anyhow::Result<()> {
+    // Exact solid-sphere and solid-cube inertia about their centers of mass.
+    let (collider, inertia) = if sphere {
+        (
+            SceneCollider::Sphere {
+                center: Vector3::zeros(),
+                radius: size,
             },
-        ));
-    }
-    world
-}
-
-/// Ground plane + `n` dynamic bodies above it (mixed spheres/boxes).
-pub fn setup_scene(n: usize) -> (hecs::World, PhysicsWorld) {
-    let mut world = hecs::World::new();
-    let physics = PhysicsWorld::new(PhysicsConfig::default());
-
-    let ground_pos = Vec3::new(0.0, -0.5, 0.0);
-    world.spawn((
-        Transform::from_position(ground_pos),
-        GlobalTransform(Mat4::from_translation(ground_pos)),
-        RigidBody::new_static(),
-        Collider {
-            shape: ColliderShape::Box {
-                half_extents: Vec3::new(100.0, 0.5, 100.0),
-            },
-            offset: Vec3::ZERO,
-            is_sensor: false,
-        },
-    ));
-
-    let cols = (n as f32).sqrt().ceil() as usize;
-    for i in 0..n {
-        let x = (i % cols) as f32 * 2.0 - (cols as f32);
-        let z = (i / cols) as f32 * 2.0 - (cols as f32);
-        let y = 1.0 + (i % 5) as f32 * 1.5;
-        let pos = Vec3::new(x, y, z);
-
-        if i % 2 == 0 {
-            world.spawn((
-                Transform::from_position(pos),
-                GlobalTransform(Mat4::from_translation(pos)),
-                RigidBody::new_dynamic(1.0),
-                SleepInfo::default(),
-                Collider {
-                    shape: ColliderShape::Sphere { radius: 0.5 },
-                    offset: Vec3::ZERO,
-                    is_sensor: false,
-                },
-            ));
-        } else {
-            world.spawn((
-                Transform::from_position(pos),
-                GlobalTransform(Mat4::from_translation(pos)),
-                RigidBody::new_dynamic(1.0),
-                SleepInfo::default(),
-                Collider {
-                    shape: ColliderShape::Box {
-                        half_extents: Vec3::splat(0.4),
-                    },
-                    offset: Vec3::ZERO,
-                    is_sensor: false,
-                },
-            ));
-        }
-    }
-
-    (world, physics)
-}
-
-// ---------------------------------------------------------------------------
-// Solver setup
-// ---------------------------------------------------------------------------
-
-/// Stacked bodies with pre-built contact manifolds for solver benchmarks.
-pub fn setup_contacts(n: usize) -> (hecs::World, Vec<ContactManifold>) {
-    let mut world = hecs::World::new();
-    let mut entities = Vec::with_capacity(n + 1);
-
-    let ground_pos = Vec3::new(0.0, -0.5, 0.0);
-    let ground = world.spawn((
-        Transform::from_position(ground_pos),
-        GlobalTransform(Mat4::from_translation(ground_pos)),
-        RigidBody::new_static(),
-        Collider {
-            shape: ColliderShape::Box {
-                half_extents: Vec3::new(50.0, 0.5, 50.0),
-            },
-            offset: Vec3::ZERO,
-            is_sensor: false,
-        },
-    ));
-    entities.push(ground);
-
-    for i in 0..n {
-        let pos = Vec3::new(0.0, 0.5 + i as f32, 0.0);
-        let entity = world.spawn((
-            Transform::from_position(pos),
-            GlobalTransform(Mat4::from_translation(pos)),
-            RigidBody::new_dynamic(1.0),
-            Collider {
-                shape: ColliderShape::Box {
-                    half_extents: Vec3::splat(0.5),
-                },
-                offset: Vec3::ZERO,
-                is_sensor: false,
-            },
-        ));
-        entities.push(entity);
-    }
-
-    let mut manifolds = Vec::new();
-    for i in 0..n {
-        let entity_a = entities[i];
-        let entity_b = entities[i + 1];
-        let contact_y = 0.5 * (i as f32 + (i + 1) as f32);
-
-        manifolds.push(ContactManifold {
-            entity_a,
-            entity_b,
-            normal: Vec3::Y,
-            contacts: vec![ContactPoint {
-                position: Vec3::new(0.0, contact_y, 0.0),
-                penetration: 0.01,
-                normal_impulse: 0.0,
-                tangent_impulse: [0.0; 2],
-            }],
-        });
-    }
-
-    (world, manifolds)
-}
-
-// ---------------------------------------------------------------------------
-// Mass physics scenario (mirrors the mass_physics demo)
-// ---------------------------------------------------------------------------
-
-const SPAWN_RADIUS: f32 = 8.0;
-const SPAWN_HEIGHT: f32 = 15.0;
-
-/// Spawn a single physics object at a deterministic position.
-fn spawn_object(world: &mut hecs::World, index: usize) {
-    let is_sphere = index.is_multiple_of(2);
-    let angle = (index * 137) as f32 * 0.01;
-    let r = SPAWN_RADIUS * (((index * 73 + 17) % 100) as f32 / 100.0).sqrt();
-    let height_jitter = (index % 5) as f32 * 0.6;
-    let pos = Vec3::new(
-        r * angle.cos(),
-        SPAWN_HEIGHT + height_jitter,
-        r * angle.sin(),
-    );
-
-    let shape = if is_sphere {
-        ColliderShape::Sphere { radius: 0.4 }
+            Matrix3::identity() * (0.4 * mass * size * size),
+        )
     } else {
-        ColliderShape::Box {
-            half_extents: Vec3::splat(0.4),
-        }
-    };
-
-    world.spawn((
-        Transform::from_position(pos),
-        GlobalTransform(Mat4::from_translation(pos)),
-        RigidBody::new_dynamic(1.0),
-        SleepInfo::default(),
-        Collider {
-            shape,
-            offset: Vec3::ZERO,
-            is_sensor: false,
-        },
-    ));
-}
-
-/// Ground + `initial` pre-existing falling bodies.
-pub fn setup_mass_scene(initial: usize) -> (hecs::World, PhysicsWorld) {
-    let mut world = hecs::World::new();
-    let physics = PhysicsWorld::new(PhysicsConfig::default());
-
-    // Ground (same as mass_physics demo)
-    let ground_pos = Vec3::ZERO;
-    world.spawn((
-        Transform::from_position(ground_pos),
-        GlobalTransform(Mat4::from_translation(ground_pos)),
-        RigidBody::new_static(),
-        Collider {
-            shape: ColliderShape::Box {
-                half_extents: Vec3::new(20.0, 5.0, 20.0),
+        (
+            SceneCollider::Box {
+                origin: Isometry3::identity(),
+                half_extents: Vector3::repeat(size),
             },
-            offset: Vec3::new(0.0, -5.0, 0.0),
-            is_sensor: false,
-        },
-    ));
-
-    for i in 0..initial {
-        spawn_object(&mut world, i);
-    }
-
-    (world, physics)
+            Matrix3::identity() * (2.0 * mass * size * size / 3.0),
+        )
+    };
+    world.spawn((RigidBody::new(
+        Isometry3::translation(position.x, position.y, position.z),
+        mass,
+        inertia,
+        vec![collider],
+    )?,));
+    Ok(())
 }
 
-/// Run `frames` frames, spawning `spawn_per_frame` objects each frame + physics step.
+/// Z-up fixtures use the native world's default ground at z=0.
+/// No rendering transforms are needed: SceneBody owns the authoritative pose.
+pub fn setup_scene(scene: Scene, n: usize) -> anyhow::Result<(hecs::World, PhysicsWorld)> {
+    let mut world = hecs::World::new();
+    let physics = PhysicsWorld::new(PhysicsConfig::default())?;
+    let n = u32::try_from(n)?;
+    let cols = n.isqrt().max(1);
+    let cols = if n.div_ceil(cols) > cols {
+        cols + 1
+    } else {
+        cols
+    };
+    for i in 0..n {
+        if matches!(scene, Scene::Mass) {
+            spawn_object(&mut world, usize::try_from(i)?)?;
+            continue;
+        }
+        let spacing = match scene {
+            Scene::Sparse => 10.0,
+            Scene::Spheres => 2.5,
+            Scene::Mixed | Scene::Falling | Scene::Stack | Scene::Mass => 1.5,
+        };
+        let position = if matches!(scene, Scene::Stack) {
+            Vector3::new(0.0, 0.0, 0.5 + f64::from(i))
+        } else {
+            Vector3::new(
+                f64::from(i % cols) * spacing,
+                f64::from(i / cols) * spacing,
+                if matches!(scene, Scene::Falling) {
+                    1.0 + f64::from(i % 5) * 1.5
+                } else if matches!(scene, Scene::Spheres | Scene::Mixed) {
+                    1.0
+                } else {
+                    0.5
+                },
+            )
+        };
+        let sphere = matches!(scene, Scene::Spheres | Scene::Sparse)
+            || (!matches!(scene, Scene::Stack) && i % 2 == 0);
+        let size = if matches!(scene, Scene::Spheres) || (matches!(scene, Scene::Mixed) && sphere) {
+            1.0
+        } else {
+            0.5
+        };
+        let mass = if matches!(scene, Scene::Mixed) && !sphere {
+            0.0
+        } else {
+            1.0
+        };
+        spawn_body(&mut world, position, sphere, size, mass)?;
+    }
+    Ok((world, physics))
+}
+
+fn spawn_object(world: &mut hecs::World, index: usize) -> anyhow::Result<()> {
+    let index = u32::try_from(index)?;
+    let angle = f64::from(index) * 137.0 * 0.01;
+    let radius = 8.0 * (f64::from(index.wrapping_mul(73).wrapping_add(17) % 100) / 100.0).sqrt();
+    spawn_body(
+        world,
+        Vector3::new(
+            radius * angle.cos(),
+            radius * angle.sin(),
+            15.0 + f64::from(index % 5) * 0.6,
+        ),
+        index % 2 == 0,
+        0.4,
+        1.0,
+    )
+}
+
+/// Advance a fixed number of real native CPU simulation steps.
+pub fn run_steps(
+    world: &mut hecs::World,
+    physics: &mut PhysicsWorld,
+    frames: usize,
+) -> anyhow::Result<()> {
+    for _ in 0..frames {
+        physics.step(world, DT)?;
+    }
+    Ok(())
+}
+
+/// Continuous insertion plus stepping, preserving the mass-physics workload.
 pub fn run_mass_physics(
     world: &mut hecs::World,
     physics: &mut PhysicsWorld,
     frames: usize,
     spawn_per_frame: usize,
     start_index: usize,
-) {
-    let mut idx = start_index;
+) -> anyhow::Result<()> {
+    let mut index = start_index;
     for _ in 0..frames {
         for _ in 0..spawn_per_frame {
-            spawn_object(world, idx);
-            idx += 1;
+            spawn_object(world, index)?;
+            index += 1;
         }
-        physics.step(world, 1.0 / 60.0);
+        physics.step(world, DT)?;
     }
+    Ok(())
 }
 
-// ---------------------------------------------------------------------------
-// GPU physics helpers
-// ---------------------------------------------------------------------------
-
-use sard::WgpuContext;
-
-/// Create a headless WgpuContext for GPU benchmarks (no window needed).
-/// Returns Err if no GPU adapter is available.
-pub fn create_headless_context() -> anyhow::Result<WgpuContext> {
-    WgpuContext::new_blocking(None)
+#[cfg(feature = "gpu-physics")]
+pub fn run_gpu_steps(
+    world: &mut hecs::World,
+    physics: &mut PhysicsWorld,
+    device: &sard::physics::GpuContactDevice,
+    frames: usize,
+) -> anyhow::Result<()> {
+    for _ in 0..frames {
+        physics.step_gpu(world, DT, device)?;
+    }
+    Ok(())
 }
 
-/// Setup a GPU-enabled physics scene: ground + `n` bodies + GPU physics init.
-pub fn setup_gpu_scene(ctx: &WgpuContext, n: usize) -> anyhow::Result<(hecs::World, PhysicsWorld)> {
-    let (world, mut physics) = setup_scene(n);
-    physics.init_gpu(ctx, n.max(256))?;
-    Ok((world, physics))
-}
-
-/// Setup a GPU-enabled mass physics scene.
-pub fn setup_gpu_mass_scene(
-    ctx: &WgpuContext,
-    initial: usize,
-) -> anyhow::Result<(hecs::World, PhysicsWorld)> {
-    let (world, mut physics) = setup_mass_scene(initial);
-    physics.init_gpu(ctx, 4096)?;
-    Ok((world, physics))
-}
-
-/// Run mass physics with GPU-accelerated step.
+#[cfg(feature = "gpu-physics")]
 pub fn run_gpu_mass_physics(
     world: &mut hecs::World,
     physics: &mut PhysicsWorld,
-    ctx: &WgpuContext,
+    device: &sard::physics::GpuContactDevice,
     frames: usize,
     spawn_per_frame: usize,
     start_index: usize,
-) {
-    let mut idx = start_index;
+) -> anyhow::Result<()> {
+    let mut index = start_index;
     for _ in 0..frames {
         for _ in 0..spawn_per_frame {
-            spawn_object(world, idx);
-            idx += 1;
+            spawn_object(world, index)?;
+            index += 1;
         }
-        physics.step_gpu(world, 1.0 / 60.0, ctx);
+        physics.step_gpu(world, DT, device)?;
     }
+    Ok(())
 }

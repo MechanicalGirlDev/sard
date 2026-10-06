@@ -19,7 +19,7 @@ struct MyApp {
 }
 
 impl App for MyApp {
-    fn init(&mut self, _ctx: &WgpuContext, world: &mut hecs::World) {
+    fn init(&mut self, _ctx: &WgpuContext, world: &mut hecs::World) -> anyhow::Result<()> {
         // Camera
         let camera = Camera::new_perspective(
             Vec3::new(3.0, 3.0, 3.0),
@@ -49,13 +49,13 @@ impl App for MyApp {
                 intensity: 1.0,
             },
         ));
+        Ok(())
     }
 
-    fn update(&mut self, world: &mut hecs::World, ctx: &SystemContext) {
+    fn update(&mut self, world: &mut hecs::World, ctx: &SystemContext) -> anyhow::Result<()> {
         // Spawn mesh on first update (surface_format is available here)
         if !self.mesh_spawned {
-            let material =
-                ColorMaterial::new(ctx.ctx, ctx.surface_format).expect("Failed to create material");
+            let material = ColorMaterial::new(ctx.ctx, ctx.surface_format)?;
             let mesh = Mesh::cube(ctx.ctx, 1.0, [0.8, 0.3, 0.2]);
 
             world.spawn((
@@ -80,6 +80,7 @@ impl App for MyApp {
                 cam.camera.set_viewport(ctx.viewport);
             }
         }
+        Ok(())
     }
 }
 
