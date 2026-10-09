@@ -43,6 +43,7 @@ jobs:
       - name: Install Vulkan software compute driver
         run: sudo apt-get update && sudo apt-get install -y mesa-vulkan-drivers
       - run: cargo test --lib --all-features -- --test-threads=1
+      - run: cargo test --test sensor_camera --all-features -- --test-threads=1
 
   check-features:
     name: Check feature combinations
@@ -55,6 +56,8 @@ jobs:
       - run: cargo check --features ecs
       - run: cargo check --features engine
       - run: cargo check --features physics
+      - run: cargo check --no-default-features --features mpm
+      - run: cargo check --no-default-features --features gpu-mpm
       - run: cargo check --features full
       - run: cargo check --no-default-features --features gui
 

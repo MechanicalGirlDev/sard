@@ -13,6 +13,8 @@
 - **Text rendering** - Optional GUI text rendering with glyphon
 - **Instanced rendering** - Efficient rendering of many identical objects
 - **Tessera physics** - Optional native rigid bodies, contacts, and GPU contact solving
+- **Native MPM** - Elasticity, sand, fluid, snow, resident GPU particles, and rigid coupling
+- **Robot cameras** - Offscreen RGB, metric depth, and exact body segmentation
 
 ## Installation
 
@@ -33,8 +35,10 @@ sard = "0.1.1"
 | `ecs` | No | hecs components and rendering systems |
 | `physics` | No | Tessera CPU physics and ECS pose synchronization; enables `ecs` |
 | `gpu-physics` | No | Tessera GPU contact detection and solving; enables `physics` |
+| `mpm` | No | Native MPM worlds, materials, sampling, and rigid coupling; enables `physics` |
+| `gpu-mpm` | No | Native resident MPM and device-side rigid coupling; enables `mpm` and `gpu-physics` |
 | `engine` | No | ECS game loop; enables `ecs` and `window` |
-| `full` | No | Engine, physics, GPU physics, and GUI |
+| `full` | No | Engine, rigid/MPM CPU and GPU physics, and GUI |
 
 ## Architecture
 
@@ -55,10 +59,11 @@ and guidance on choosing between them.
 ### Physics
 
 Physics is provided by [Tessera](https://github.com/MechanicalGirlDev/tessera),
-pinned to Git revision `9fea04efe38d9eb02541057962848532e755b3e4`.
+pinned to Git revision `95213c183d4cf59f0f2d4b36c3e6a6e86a08e7d5`.
 Sard contains no collision detector, contact solver, integrator, or physics compute shader.
-Its `PhysicsWorld` only registers native Tessera `SceneBody` ECS components, steps Tessera,
-and copies solved poses into optional rendering transforms.
+Its `PhysicsWorld` registers native Tessera `SceneBody` ECS components, steps Tessera,
+and copies solved poses into optional rendering transforms. `from_tessera` also accepts
+a loaded articulated robot, and `step_with_efforts` forwards native joint efforts.
 
 `PhysicsConfig` is Tessera's `ArticulatedWorldParams`; its default world is Z-up with a
 finite ground at Z = 0. `RigidBody` is its `SceneBody`, which owns colliders, mass, inertia,
@@ -66,11 +71,12 @@ velocities, force, and pose. Edit the body's native pose to teleport it. `Collid
 is an optional ECS component applied to that body's colliders. Physics entities use
 world-space transforms and should not have an ECS parent.
 
-The previous Sard collider, sensor, damping, torque-accumulator, solver, and GPU-initialization
-APIs have been removed. Use native types through `sard::physics::tessera` and
-`sard::physics::nalgebra`. Tessera's scene bodies do not currently expose trigger sensors,
-external torque, or damping. Native collision geometry includes spheres, boxes, capsules,
-cylinders, and prepared convex hulls, including body-local offsets and rotations.
+Use native types through `sard::physics::tessera` and `sard::physics::nalgebra`.
+For direct ownership of articulated worlds or resident GPU batches, publish their
+authoritative snapshots with `publish_poses` or `publish_gpu_poses` into visual-only
+entities. Do not attach competing `RigidBody` components to those visuals. Native
+collision geometry includes spheres, boxes, capsules, cones, cylinders, convex hulls,
+polylines, triangle meshes, and compound body-local colliders.
 
 GPU physics requires an owned `sard::physics::GpuContactDevice`; it does not reuse Sard's
 render device because Tessera currently uses wgpu 28 while rendering uses wgpu 30.
@@ -79,6 +85,23 @@ uses GPU contact detection and solving with CPU world preparation and pose integ
 App `init`, `update`, and `fixed_update` callbacks return `anyhow::Result<()>`; `run_app`
 exits and returns callback errors rather than continuing after failed physics. Physics demos
 step Tessera in the engine's bounded fixed-update loop, using durations in `f64` seconds.
+
+`sard::physics::mpm` exposes the native MPM API with the `mpm` feature. With `gpu-mpm`,
+it also exposes `GpuMpmResidentSession` and `GpuRigidMpmCoupler`. Explicitly synchronize
+resident sessions before converting their current particles with `mpm_particle_data`.
+The render adapter zeros velocities; construct `ParticleSystem` with zero acceleration
+to display a frozen snapshot instead of extrapolating it with another solver.
+
+`SensorCamera` borrows an explicit scene of `SensorObject` values. It provides packed
+sRGB bytes, axial depth in meters, and exact `u32` body IDs; zero denotes background.
+It uses opaque base colors and optional UV-mapped textures, without scene lighting
+or shadows. Camera axes are -Z forward and +Y up. Attach it to the current solved body
+pose and a rigid mounting transform with `attach_to_body`.
+
+See [physics ownership and usage](docs/physics.md) and the
+[Nexus capability and verification ledger](docs/nexus-3d-coverage.md). The additional
+native IK, Neo-Hookean sand, scene torque/impulse controls, and topology preservation
+are included in the published Tessera dependency pin.
 
 ## Examples
 

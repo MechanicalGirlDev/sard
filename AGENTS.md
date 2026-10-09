@@ -66,8 +66,10 @@ compute = []
 ecs = ["dep:hecs"]
 physics = ["ecs", "dep:tessera-physics", "dep:nalgebra"]
 gpu-physics = ["physics", "tessera-physics/gpu-contact"]
+mpm = ["physics", "dep:tessera-mpm", "tessera-mpm/rigid-coupling"]
+gpu-mpm = ["mpm", "gpu-physics", "tessera-mpm/gpu-rigid-coupling"]
 engine = ["ecs", "window"]
-full = ["engine", "physics", "gpu-physics", "gui"]
+full = ["engine", "physics", "gpu-physics", "gpu-mpm", "gui"]
 ```
 
 ## Key Patterns
@@ -126,6 +128,16 @@ native add/remove APIs for topology changes so contact/sleep state remains consi
 GPU errors propagate; there is no local physics fallback. Tests use serial execution
 to avoid parallel device initialization. CI explicitly opts into software Vulkan computation.
 
+Advanced native worlds and resident batches keep their own physics owner. Publish
+their solved poses to visual-only entities with `publish_poses`/`publish_gpu_poses`;
+do not attach competing `RigidBody` components. MPM sessions require explicit
+synchronization before snapshot conversion. See `docs/physics.md` for coupling
+step ownership and `docs/nexus-3d-coverage.md` for evidence and publication status.
+
+`SensorCamera` renders explicit scenes into RGB, axial metric depth, and exact
+body IDs. Its opaque color/UV-texture pass has no lighting or shadows. Test it
+with `cargo test --test sensor_camera --all-features -- --test-threads=1`.
+
 ## ECS Components
 
 - **Transform/GlobalTransform/Parent/Children** - Transform hierarchy with propagation system
@@ -153,7 +165,7 @@ to avoid parallel device initialization. CI explicitly opts into software Vulkan
 - `wgpu` 30 - GPU backend
 - `glam` 0.33 - Math (Vec3, Mat4, Quat, etc.)
 - `hecs` 0.11 - ECS (optional)
-- `tessera-physics` - Optional physics, pinned to published Git revision `9fea04efe38d9eb02541057962848532e755b3e4`
+- `tessera-physics`, `tessera-mpm` - Optional native physics, both pinned to published Git revision `95213c183d4cf59f0f2d4b36c3e6a6e86a08e7d5`
 - `nalgebra` 0.30 - Native Tessera math types (optional)
 - `urdf-rs` 0.9 - URDF parsing
 - `winit` 0.30 - Window management (optional)
