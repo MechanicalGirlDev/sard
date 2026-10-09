@@ -74,7 +74,8 @@ pub use renderer::{
     DepthMaterial, DirectionalLight, DirectionalShadow, Frustum, FrustumCuller, Geometry, Gm,
     GridMaterial, InstancedMesh, Intersection, Light, LineMaterial, LineStrip, Lines, Material,
     Mesh, ModelUniform, NormalMaterial, Object, ParticleData, ParticleSystem, PbrMaterial,
-    PhongMaterial, Plane, PointLight, PositionMaterial, Projection, Rectangle, ShadowConfig,
+    PhongMaterial, Plane, PointLight, PositionMaterial, Projection, Rectangle, SensorCamera,
+    SensorCameraConfig, SensorChannels, SensorError, SensorFrame, SensorObject, ShadowConfig,
     ShadowMap, ShadowUniform, Skybox, SpotLight, SpriteMaterial, Sprites, Terrain, TerrainLod,
     TerrainMaterial, TerrainUniform, UVMaterial, UnlitMaterial,
 };

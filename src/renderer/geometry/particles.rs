@@ -150,6 +150,10 @@ impl ParticleSystem {
 }
 
 impl Geometry for ParticleSystem {
+    fn is_billboard(&self) -> bool {
+        true
+    }
+
     fn vertex_buffer(&self) -> &VertexBuffer {
         &self.vertex_buffer
     }

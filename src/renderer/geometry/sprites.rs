@@ -77,6 +77,10 @@ impl Sprites {
 }
 
 impl Geometry for Sprites {
+    fn is_billboard(&self) -> bool {
+        true
+    }
+
     fn vertex_buffer(&self) -> &VertexBuffer {
         &self.vertex_buffer
     }

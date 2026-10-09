@@ -121,6 +121,12 @@ pub trait Geometry {
     /// Get the axis-aligned bounding box.
     fn aabb(&self) -> Aabb;
 
+    /// Whether standard `Vertex` positions store centers and normal XY stores
+    /// camera-facing corner offsets in world units rather than surface normals.
+    fn is_billboard(&self) -> bool {
+        false
+    }
+
     /// Draw the geometry using the given render pass.
     fn draw<'a>(&'a self, render_pass: &mut wgpu::RenderPass<'a>) {
         render_pass.set_vertex_buffer(0, self.vertex_buffer().slice());

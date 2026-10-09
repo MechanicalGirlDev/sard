@@ -6,6 +6,7 @@ use super::{Aabb, Geometry};
 use crate::context::WgpuContext;
 use crate::core::buffer::{IndexBuffer, VertexBuffer};
 use crate::core::pipeline::Vertex;
+use crate::core::vertex::VertexPNUC;
 use glam::Vec3;
 
 /// A mesh with vertex and index data.
@@ -41,6 +42,28 @@ impl Mesh {
             index_buffer,
             draw_count,
             aabb,
+        }
+    }
+
+    /// Create a mesh with explicit UV coordinates and RGBA vertex colors.
+    pub fn new_textured(
+        ctx: &WgpuContext,
+        vertices: &[VertexPNUC],
+        indices: Option<&[u32]>,
+        label: Option<&str>,
+    ) -> Self {
+        let vertex_buffer = VertexBuffer::new(ctx, vertices, label);
+        let (index_buffer, draw_count) = if let Some(indices) = indices {
+            let buffer = IndexBuffer::new_u32(ctx, indices, label);
+            (Some(buffer), indices.len() as u32)
+        } else {
+            (None, vertices.len() as u32)
+        };
+        Self {
+            vertex_buffer,
+            index_buffer,
+            draw_count,
+            aabb: Aabb::from_points(vertices.iter().map(|vertex| Vec3::from(vertex.position))),
         }
     }
 

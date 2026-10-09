@@ -9,6 +9,7 @@ pub mod geometry;
 pub mod light;
 pub mod material;
 pub mod object;
+pub mod sensor;
 pub mod shadow;
 pub mod viewer;
 
@@ -26,5 +27,8 @@ pub use material::{
     TerrainUniform, UVMaterial, UnlitMaterial,
 };
 pub use object::{Gm, Object};
+pub use sensor::{
+    SensorCamera, SensorCameraConfig, SensorChannels, SensorError, SensorFrame, SensorObject,
+};
 pub use shadow::{DirectionalShadow, ShadowConfig, ShadowMap, ShadowUniform};
 pub use viewer::{Camera, Projection, Viewer};
