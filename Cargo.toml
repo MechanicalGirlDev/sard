@@ -21,8 +21,10 @@ compute = []
 ecs = ["dep:hecs"]
 physics = ["ecs", "dep:tessera-physics", "dep:nalgebra"]
 gpu-physics = ["physics", "tessera-physics/gpu-contact"]
+mpm = ["physics", "dep:tessera-mpm", "tessera-mpm/rigid-coupling"]
+gpu-mpm = ["mpm", "gpu-physics", "tessera-mpm/gpu-rigid-coupling"]
 engine = ["ecs", "window"]
-full = ["engine", "physics", "gpu-physics", "gui"]
+full = ["engine", "physics", "gpu-physics", "gpu-mpm", "gui"]
 
 [dependencies]
 # GPU
@@ -45,7 +47,8 @@ urdf-rs = "0.9.0"
 hecs = { version = "0.11.1", optional = true }
 
 # Physics (optional)
-tessera-physics = { git = "https://github.com/MechanicalGirlDev/tessera", rev = "9fea04efe38d9eb02541057962848532e755b3e4", optional = true }
+tessera-physics = { git = "https://github.com/MechanicalGirlDev/tessera", rev = "95213c183d4cf59f0f2d4b36c3e6a6e86a08e7d5", optional = true }
+tessera-mpm = { git = "https://github.com/MechanicalGirlDev/tessera", rev = "95213c183d4cf59f0f2d4b36c3e6a6e86a08e7d5", optional = true }
 nalgebra = { version = "0.30", optional = true }
 
 # Utilities

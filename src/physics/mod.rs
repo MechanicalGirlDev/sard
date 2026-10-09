@@ -15,12 +15,153 @@ use crate::ecs::components::physics::{ColliderMaterial, RigidBody};
 use crate::ecs::components::transform::{GlobalTransform, Transform};
 
 pub use nalgebra;
+/// Native CPU/GPU particles, materials, emitters, resident sessions, and couplers.
+#[cfg(feature = "mpm")]
+pub use tessera_mpm as mpm;
 pub use tessera_physics as tessera;
+pub use tessera_physics::{articulated_world, articulation, batch, mjcf, urdf};
+#[cfg(feature = "mpm")]
+mod mpm_render;
+#[cfg(feature = "mpm")]
+pub use mpm_render::{mpm_particle_data, ParticleRenderError};
 pub use tessera_physics::articulated_world::{
     ArticulatedWorldError as PhysicsError, ArticulatedWorldParams as PhysicsConfig, SceneCollider,
 };
 #[cfg(feature = "gpu-physics")]
 pub use tessera_physics::gpu_contact_pipeline::GpuContactDevice;
+
+/// Native GPU-resident bodies and environments, independent of the ECS bridge.
+///
+/// Stepping retains state on Tessera's device. Read back explicitly and call
+/// [`publish_poses`] to update visual entities; do not attach `RigidBody` copies.
+#[cfg(feature = "gpu-physics")]
+pub mod gpu {
+    pub use tessera_physics::{
+        gpu_point_query as point_query, gpu_ray_query as ray_query, gpu_rigid_ball_joint as joints,
+        gpu_rigid_shape as shape, gpu_rigid_sphere_world as rigid, gpu_rigid_state as state,
+    };
+}
+
+/// A visual binding cannot accept the supplied authoritative pose.
+#[derive(Debug, thiserror::Error)]
+pub enum PosePublicationError {
+    #[error("visual entity {0:?} does not exist")]
+    MissingEntity(hecs::Entity),
+    #[error("visual entity {0:?} has a competing rigid-body owner")]
+    CompetingBody(hecs::Entity),
+    #[error("visual entity {0:?} has an ECS parent, but physics poses are world-space")]
+    ParentedEntity(hecs::Entity),
+    #[error("visual entity {0:?} has no rendering transform")]
+    MissingTransform(hecs::Entity),
+    #[error("pose for visual entity {0:?} cannot be represented by rendering transforms")]
+    InvalidPose(hecs::Entity),
+}
+
+/// Publish authoritative native world poses without stepping or editing physics.
+///
+/// Visual bindings must have a rendering transform, no parent, and no
+/// `RigidBody` component. The topology owner supplies the current entity/pose
+/// pairs after native mutation or GPU readback. Validation precedes all writes.
+///
+/// # Errors
+///
+/// Returns [`PosePublicationError`] for stale entities, conflicting ownership,
+/// parented entities, missing transforms, or non-finite rendering poses.
+pub fn publish_poses(
+    world: &mut hecs::World,
+    poses: &[(hecs::Entity, Isometry3<f64>)],
+) -> Result<(), PosePublicationError> {
+    for &(entity, pose) in poses {
+        if !world.contains(entity) {
+            return Err(PosePublicationError::MissingEntity(entity));
+        }
+        if world.get::<&RigidBody>(entity).is_ok() {
+            return Err(PosePublicationError::CompetingBody(entity));
+        }
+        if world
+            .get::<&crate::ecs::components::transform::Parent>(entity)
+            .is_ok()
+        {
+            return Err(PosePublicationError::ParentedEntity(entity));
+        }
+        if world.get::<&Transform>(entity).is_err()
+            && world.get::<&GlobalTransform>(entity).is_err()
+        {
+            return Err(PosePublicationError::MissingTransform(entity));
+        }
+        let (position, rotation) = rendering_pose(pose);
+        if !position.is_finite() || !rotation.is_finite() {
+            return Err(PosePublicationError::InvalidPose(entity));
+        }
+    }
+    for &(entity, pose) in poses {
+        let mut query =
+            world.query_one::<(Option<&mut Transform>, Option<&mut GlobalTransform>)>(entity);
+        let (transform, global) = query
+            .get()
+            .map_err(|_| PosePublicationError::MissingEntity(entity))?;
+        publish_pose(pose, transform, global);
+    }
+    Ok(())
+}
+
+/// Publish an explicitly read-back native resident GPU snapshot.
+///
+/// Bindings are supplied by the owner after any body/environment index remap.
+/// This performs no GPU submission, simulation step, or ECS-to-physics upload.
+#[cfg(feature = "gpu-physics")]
+pub fn publish_gpu_poses(
+    world: &mut hecs::World,
+    states: &[(hecs::Entity, gpu::state::GpuRigidBodyState)],
+) -> Result<(), PosePublicationError> {
+    let poses = states
+        .iter()
+        .map(|(entity, state)| {
+            if !state.is_valid() {
+                return Err(PosePublicationError::InvalidPose(*entity));
+            }
+            let [x, y, z, _] = state.position_inverse_mass;
+            let [qx, qy, qz, qw] = state.orientation;
+            let pose = Isometry3::from_parts(
+                nalgebra::Translation3::new(f64::from(x), f64::from(y), f64::from(z)),
+                nalgebra::UnitQuaternion::new_normalize(nalgebra::Quaternion::new(
+                    f64::from(qw),
+                    f64::from(qx),
+                    f64::from(qy),
+                    f64::from(qz),
+                )),
+            );
+            Ok((*entity, pose))
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+    publish_poses(world, &poses)
+}
+
+fn rendering_pose(pose: Isometry3<f64>) -> (glam::Vec3, glam::Quat) {
+    let position = DVec3::new(pose.translation.x, pose.translation.y, pose.translation.z).as_vec3();
+    let quaternion = pose.rotation.quaternion();
+    let rotation =
+        DQuat::from_xyzw(quaternion.i, quaternion.j, quaternion.k, quaternion.w).as_quat();
+    (position, rotation)
+}
+
+fn publish_pose(
+    pose: Isometry3<f64>,
+    transform: Option<&mut Transform>,
+    global: Option<&mut GlobalTransform>,
+) {
+    let (position, rotation) = rendering_pose(pose);
+    let matrix = if let Some(transform) = transform {
+        transform.position = position;
+        transform.rotation = rotation;
+        transform.to_matrix()
+    } else {
+        Mat4::from_rotation_translation(rotation, position)
+    };
+    if let Some(global) = global {
+        global.0 = matrix;
+    }
+}
 
 /// Synchronizes native Tessera bodies with one ECS world.
 ///
@@ -48,8 +189,29 @@ impl PhysicsWorld {
             vec![],
             0,
         )?;
+        Self::from_tessera(ArticulatedWorld::new(
+            root,
+            Isometry3::identity(),
+            vec![],
+            config,
+        )?)
+    }
+
+    /// Attach an articulated robot world to ECS-owned free scene bodies.
+    ///
+    /// URDF/MJCF worlds retain their native links, drives, and joint state.
+    /// Keep loader metadata separately. Existing native free bodies cannot be
+    /// adopted because this bridge owns its scene-body/entity correspondence.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`PhysicsError::InvalidInput`] if scene bodies already exist.
+    pub fn from_tessera(tessera: ArticulatedWorld) -> Result<Self, PhysicsError> {
+        if !tessera.scene_bodies.is_empty() {
+            return Err(PhysicsError::InvalidInput);
+        }
         Ok(Self {
-            tessera: ArticulatedWorld::new(root, Isometry3::identity(), vec![], config)?,
+            tessera,
             entities: Vec::new(),
         })
     }
@@ -63,8 +225,22 @@ impl PhysicsWorld {
     ///
     /// Tessera owns timestep subdivision through `PhysicsConfig::max_substep`.
     pub fn step(&mut self, world: &mut hecs::World, delta_time: f64) -> Result<(), PhysicsError> {
+        self.step_with_efforts(world, delta_time, &[])
+    }
+
+    /// Step a robot and ECS free bodies together with native generalized efforts.
+    ///
+    /// The effort slice must contain exactly `articulation.dof()` values.
+    /// Link poses are available through [`Self::tessera_world`] and can be
+    /// published to separate visual entities with [`publish_poses`].
+    pub fn step_with_efforts(
+        &mut self,
+        world: &mut hecs::World,
+        delta_time: f64,
+        efforts: &[f64],
+    ) -> Result<(), PhysicsError> {
         let slots = self.upload(world)?;
-        self.tessera.step(delta_time, &[])?;
+        self.tessera.step(delta_time, efforts)?;
         self.download(world, &slots);
         Ok(())
     }
@@ -80,8 +256,20 @@ impl PhysicsWorld {
         delta_time: f64,
         device: &GpuContactDevice,
     ) -> Result<(), PhysicsError> {
+        self.step_gpu_with_efforts(world, delta_time, &[], device)
+    }
+
+    /// Use native GPU contacts for a robot and ECS bodies with explicit efforts.
+    #[cfg(feature = "gpu-physics")]
+    pub fn step_gpu_with_efforts(
+        &mut self,
+        world: &mut hecs::World,
+        delta_time: f64,
+        efforts: &[f64],
+        device: &GpuContactDevice,
+    ) -> Result<(), PhysicsError> {
         let slots = self.upload(world)?;
-        self.tessera.step_gpu(delta_time, &[], device)?;
+        self.tessera.step_gpu(delta_time, efforts, device)?;
         self.download(world, &slots);
         Ok(())
     }
@@ -144,9 +332,13 @@ impl PhysicsWorld {
                             )?;
                         }
                     }
-                    // Native scene force is persistent; Tessera also owns its
-                    // validation and automatic wake behavior.
-                    self.tessera.scene_bodies[index].force = body.force;
+                    // Motion setters handled cache invalidation above. Forward
+                    // remaining native state (including persistent loads), only
+                    // cloning geometry when an external edit actually differs.
+                    let previous = &mut self.tessera.scene_bodies[index];
+                    if *previous != *body {
+                        previous.clone_from(body);
+                    }
                     index
                 }
                 std::collections::hash_map::Entry::Vacant(entry) => {
@@ -178,25 +370,7 @@ impl PhysicsWorld {
             body.pose = solved.pose;
             body.linear_velocity = solved.linear_velocity;
             body.angular_velocity = solved.angular_velocity;
-            let position = DVec3::new(
-                solved.pose.translation.x,
-                solved.pose.translation.y,
-                solved.pose.translation.z,
-            )
-            .as_vec3();
-            let quaternion = solved.pose.rotation.quaternion();
-            let rotation =
-                DQuat::from_xyzw(quaternion.i, quaternion.j, quaternion.k, quaternion.w).as_quat();
-            let matrix = if let Some(transform) = transform {
-                transform.position = position;
-                transform.rotation = rotation;
-                transform.to_matrix()
-            } else {
-                Mat4::from_rotation_translation(rotation, position)
-            };
-            if let Some(global) = global {
-                global.0 = matrix;
-            }
+            publish_pose(solved.pose, transform, global);
         }
     }
 }
@@ -217,6 +391,128 @@ mod tests {
             }],
         )
         .unwrap()
+    }
+
+    #[test]
+    fn authoritative_pose_publication_preserves_visual_scale() {
+        // Given: a visual entity without a competing physics owner.
+        let mut world = hecs::World::new();
+        let entity = world.spawn((
+            Transform {
+                scale: Vec3::new(2.0, 3.0, 4.0),
+                ..Transform::default()
+            },
+            GlobalTransform::default(),
+        ));
+        let pose = Isometry3::new(Vector3::new(1.0, 2.0, 3.0), Vector3::z() * 0.5);
+
+        // When: a native owner publishes its authoritative world pose.
+        publish_poses(&mut world, &[(entity, pose)]).unwrap();
+
+        // Then: rendering receives translation/rotation without losing geometry scale.
+        let transform = world.get::<&Transform>(entity).unwrap();
+        assert!(transform
+            .position
+            .abs_diff_eq(Vec3::new(1.0, 2.0, 3.0), 1e-6));
+        assert!(transform
+            .rotation
+            .abs_diff_eq(Quat::from_rotation_z(0.5), 1e-6));
+        assert_eq!(transform.scale, Vec3::new(2.0, 3.0, 4.0));
+        assert!(world
+            .get::<&GlobalTransform>(entity)
+            .unwrap()
+            .0
+            .abs_diff_eq(transform.to_matrix(), 1e-6));
+    }
+
+    #[test]
+    fn pose_publication_rejects_competing_owners_before_any_write() {
+        // Given: one visual binding followed by an ECS-owned native body.
+        let mut world = hecs::World::new();
+        let visual = world.spawn((Transform::default(),));
+        let body = world.spawn((sphere(Vector3::new(0.0, 0.0, 3.0)), Transform::default()));
+        let pose = Isometry3::translation(4.0, 5.0, 6.0);
+
+        // When: publication tries to introduce a second owner for that body.
+        let result = publish_poses(&mut world, &[(visual, pose), (body, pose)]);
+
+        // Then: the complete publication is rejected, including the earlier visual.
+        assert!(matches!(result, Err(PosePublicationError::CompetingBody(e)) if e == body));
+        assert_eq!(
+            world.get::<&Transform>(visual).unwrap().position,
+            Vec3::ZERO
+        );
+    }
+
+    #[test]
+    fn bridge_rejects_unbound_native_scene_bodies() {
+        // Given: a native owner with a scene body but no corresponding ECS entity.
+        let mut native = PhysicsWorld::new(PhysicsConfig::default()).unwrap().tessera;
+        native.add_scene_body(sphere(Vector3::new(0.0, 0.0, 3.0)));
+
+        // When: that owner is passed to the ECS bridge.
+        let result = PhysicsWorld::from_tessera(native);
+
+        // Then: native dense slots cannot be mistaken for ECS bindings.
+        assert!(matches!(result, Err(PhysicsError::InvalidInput)));
+    }
+
+    #[test]
+    fn robot_efforts_and_ecs_contacts_match_direct_native_world() {
+        // Given: identical loaded robots beside identical free bodies.
+        let xml = r#"<robot name="slider">
+          <link name="base"/>
+          <link name="slider">
+            <inertial><mass value="1"/><inertia ixx="1" ixy="0" ixz="0" iyy="1" iyz="0" izz="1"/></inertial>
+            <collision><geometry><sphere radius="0.5"/></geometry></collision>
+          </link>
+          <joint name="slide" type="prismatic">
+            <parent link="base"/><child link="slider"/><origin xyz="0 0 3"/>
+            <axis xyz="1 0 0"/><limit lower="-2" upper="2" effort="10" velocity="10"/>
+          </joint>
+        </robot>"#;
+        let options = urdf::UrdfLoadOptions {
+            world: PhysicsConfig {
+                gravity: [0.0; 3],
+                max_substep: 0.005,
+                ..PhysicsConfig::default()
+            },
+            ..urdf::UrdfLoadOptions::default()
+        };
+        let loaded = urdf::load_urdf_str(xml, options.clone()).unwrap();
+        let mut direct = urdf::load_urdf_str(xml, options).unwrap().world;
+        let mut physics = PhysicsWorld::from_tessera(loaded.world).unwrap();
+        let mut world = hecs::World::new();
+        let body = sphere(Vector3::new(0.75, 0.0, 3.0));
+        let entity = world.spawn((body.clone(), Transform::default()));
+        direct.add_scene_body(body);
+        let visual = world.spawn((Transform::default(),));
+
+        // When: the robot and ECS free body share contacts and nonzero efforts.
+        for _ in 0..40 {
+            physics
+                .step_with_efforts(&mut world, 0.005, &[2.0])
+                .unwrap();
+            direct.step(0.005, &[2.0]).unwrap();
+        }
+        let link_pose = physics.tessera_world().link_poses().unwrap()[1];
+        publish_poses(&mut world, &[(visual, link_pose)]).unwrap();
+
+        // Then: both generalized and free-body states match actual native dynamics.
+        assert_eq!(physics.tessera_world().positions, direct.positions);
+        assert_eq!(physics.tessera_world().velocities, direct.velocities);
+        assert!(physics.tessera_world().positions[0].abs() > 1e-5);
+        assert_eq!(
+            *world.get::<&RigidBody>(entity).unwrap(),
+            direct.scene_bodies[0]
+        );
+        assert!(world.get::<&RigidBody>(entity).unwrap().pose.translation.x > 0.75);
+        assert!(
+            (f64::from(world.get::<&Transform>(visual).unwrap().position.x)
+                - link_pose.translation.x)
+                .abs()
+                < 1e-6
+        );
     }
 
     #[test]
@@ -477,6 +773,92 @@ mod tests {
             .unwrap()
             .0
             .abs_diff_eq(expected, 1e-5));
+    }
+
+    #[cfg(feature = "gpu-physics")]
+    #[test]
+    fn resident_primitive_environments_publish_and_reset_independently() {
+        // Given: overlapping world coordinates in two native GPU environments.
+        use gpu::rigid::{
+            GpuRigidPrimitiveBatch, GpuRigidPrimitiveEnvironment, GpuRigidSphereWorldConfig,
+        };
+        use gpu::shape::GpuRigidShape;
+        use gpu::state::GpuRigidBodyState;
+        let device = GpuContactDevice::new().unwrap();
+        let stationary = GpuRigidBodyState {
+            position_inverse_mass: [0.0, 0.0, 3.0, 1.0],
+            orientation: [0.0, 0.0, 0.0, 1.0],
+            linear_velocity: [0.0; 4],
+            angular_velocity: [0.0; 4],
+            inverse_inertia_sleep: [1.0, 1.0, 1.0, 0.0],
+        };
+        let moving = GpuRigidBodyState {
+            linear_velocity: [1.0, 0.0, 0.0, 0.0],
+            ..stationary
+        };
+        let first = [stationary];
+        let second = [moving];
+        let shape = [GpuRigidShape::Sphere { radius: 0.2 }];
+        let mut batch = GpuRigidPrimitiveBatch::new_primitives(
+            device.device(),
+            device.queue(),
+            &[
+                GpuRigidPrimitiveEnvironment {
+                    states: &first,
+                    shapes: &shape,
+                },
+                GpuRigidPrimitiveEnvironment {
+                    states: &second,
+                    shapes: &shape,
+                },
+            ],
+            GpuRigidSphereWorldConfig {
+                gravity: [0.0; 3],
+                ground_half_extent: None,
+                ..GpuRigidSphereWorldConfig::default()
+            },
+        )
+        .unwrap();
+        let mut world = hecs::World::new();
+        let first_visual = world.spawn((Transform::default(),));
+        let second_visual = world.spawn((Transform::default(), GlobalTransform::default()));
+
+        // When: resident stepping runs without ECS uploads, followed by explicit readback.
+        for _ in 0..10 {
+            let _contacts = batch.step(0.01).unwrap();
+        }
+        publish_gpu_poses(
+            &mut world,
+            &[
+                (first_visual, batch.readback_environment(0).unwrap()[0]),
+                (second_visual, batch.readback_environment(1).unwrap()[0]),
+            ],
+        )
+        .unwrap();
+        batch.reset_environment(0, &first).unwrap();
+
+        // Then: overlap across environments never becomes contact or a shared reset.
+        assert!(
+            world
+                .get::<&Transform>(first_visual)
+                .unwrap()
+                .position
+                .x
+                .abs()
+                < 1e-6
+        );
+        assert!((world.get::<&Transform>(second_visual).unwrap().position.x - 0.1).abs() < 1e-6);
+        assert!(
+            (batch.readback_environment(1).unwrap()[0].position_inverse_mass[0] - 0.1).abs() < 1e-6
+        );
+        assert!(world
+            .get::<&GlobalTransform>(second_visual)
+            .unwrap()
+            .0
+            .abs_diff_eq(
+                world.get::<&Transform>(second_visual).unwrap().to_matrix(),
+                1e-6
+            ));
     }
 
     #[cfg(feature = "gpu-physics")]

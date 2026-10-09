@@ -816,6 +816,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "aa9a19cbb55df58761df49b23516a86d432839add4af60fc256da840f66ed35b"
 
 [[package]]
+name = "futures-channel"
+version = "0.3.34"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b1f9e3d69d39e4862ffed03ed071a76f9a13ba1d9109d355b0f0aa6b15e393c4"
+dependencies = [
+ "futures-core",
+]
+
+[[package]]
 name = "futures-core"
 version = "0.3.34"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2405,6 +2414,7 @@ dependencies = [
  "hecs",
  "nalgebra",
  "pollster 1.0.1",
+ "tessera-mpm",
  "tessera-physics",
  "thiserror 2.0.20",
  "tracing",
@@ -2758,9 +2768,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "tessera-mpm"
+version = "0.1.4"
+source = "git+https://github.com/MechanicalGirlDev/tessera?rev=95213c183d4cf59f0f2d4b36c3e6a6e86a08e7d5#95213c183d4cf59f0f2d4b36c3e6a6e86a08e7d5"
+dependencies = [
+ "bytemuck",
+ "futures-channel",
+ "nalgebra",
+ "tessera-physics",
+ "thiserror 2.0.20",
+ "wgpu 28.0.0",
+]
+
+[[package]]
 name = "tessera-physics"
 version = "0.1.4"
-source = "git+https://github.com/MechanicalGirlDev/tessera?rev=9fea04efe38d9eb02541057962848532e755b3e4#9fea04efe38d9eb02541057962848532e755b3e4"
+source = "git+https://github.com/MechanicalGirlDev/tessera?rev=95213c183d4cf59f0f2d4b36c3e6a6e86a08e7d5#95213c183d4cf59f0f2d4b36c3e6a6e86a08e7d5"
 dependencies = [
  "bytemuck",
  "nalgebra",
