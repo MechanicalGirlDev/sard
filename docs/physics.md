@@ -75,6 +75,88 @@ resident errors invalidate or reject the operation; they do not silently fall
 back. Tessera's direct transfer path separately documents its CPU treatment of
 ill-conditioned material states.
 
+## Selected-link contact impulses
+
+`ContactImpulseSensor::new(&[link_indices...])` selects one to four unique native
+articulated links. `observe(native_world, substep_seconds)` reads the world's
+last-substep contact samples and returns scalar normal impulses in newton seconds.
+Opposing contacts add; tangential friction is excluded. Pass the duration of the
+represented native substep, not the enclosing control frame. This API samples
+host diagnostics, not a GPU-resident policy buffer.
+
+`physics::gpu::articulated::GpuArticulatedDynamicsBatch::normal_impulse_sensor`
+creates the native resident sensor. It uses packed solved contact rows directly
+and exposes an output buffer in `[environment, selected_link]` order. Encode it
+after the desired contact solve on the owner's command encoder, then submit.
+`readback` downloads the last observation; it does not perform a new observation.
+Both coordinate and mass-solve faults propagate, including when sampled before
+state integration. Device consumers receive NaN for a failed environment.
+
+Each observation replaces the previous one, rather than accumulating a frame.
+The native normal solve includes restitution; Nexus samples before its separate
+restitution pass. Neither API includes tangential friction, and neither promises
+identical values across different solvers or restitution schedules.
+
+## Resident controls and reset templates
+
+`physics::gpu::articulated` exposes the native articulated owner, while
+`articulated_state`, `controls`, `contact_sensors`, and `contact_policy` expose
+its supporting types. Use `physics::gpu::wgpu` for native compute descriptors
+and buffers: this is wgpu 28, not Sard's rendering wgpu 30.
+
+`enable_motor_target_control` binds equally sized action maps per environment.
+Each map identifies a native scalar coordinate, its child link, and position or
+velocity target. Spherical quaternion drives, root twist slots, and scaled mimic
+coordinates are not scalar targets. Configure native motor gains and force caps
+before enabling the maps.
+
+`encode_motor_targets` reads an exact-sized `f32` STORAGE buffer in
+`[actuated_coordinate, environment]` order. Values must be finite, with position
+targets inside native joint limits. A GPU producer may write the buffer earlier
+on the same encoder. No action readback or CPU target upload occurs.
+
+`encode_motor_target_delays` reads one `u32` substep delay per environment from
+another STORAGE buffer. It may run before action scatter on the same encoder.
+Delay `k` retains the previous applied target for exactly `k` physics substeps,
+then applies the new target before substep `k + 1`. Updating a pending delay or
+latching replacement actions restarts the corresponding countdown. Whole and
+split stepping consume the same device-side counters.
+
+`snapshot_reset_templates` captures current native state and scalar/quaternion
+drive parameters on the device. `encode_reset_envs_from_templates` selects
+destination/template environments with compatible coordinate/quaternion layouts.
+Floating roots accept translation offsets and twist overrides. Selected resets
+restore drives, cancel selected pending actions, clear selected contact/sleep
+history, and refresh derived poses; other environments retain their state and
+controls. Templates belong to their source owner and remain immutable. Serialize
+submission, stepping, and readback; a snapshot containing a fault preserves it.
+This snapshot concerns articulated state/drives, not external prescribed obstacles.
+
+`GpuContactPolicy` configures recovery gain, recovery speed cap, ignored
+penetration, and cached-impulse damping. `update_contact_policy` validates before
+upload. Native contact sweeps and fixed substeps are distinct controls; these
+parameters do not pretend to implement Nexus's TGS frequency/damping formulas.
+
+## Imported MJCF actuators
+
+`LoadedMjcf::actuators` retains supported stateless actuators in XML declaration
+order: motor, position, velocity, damper, and fixed-gain general actuators.
+Metadata resolves joint names to native scalar coordinates and retains gear,
+gains, and enabled control/force ranges. Unsupported dynamics or transmissions
+return a typed error instead of disappearing during load.
+
+`set_controls` atomically accepts an actuator-order vector; this is not a
+coordinate-order effort vector. `LoadedMjcf::step` reevaluates held controls at
+every native substep. Multiple actuators on one coordinate sum after their
+individual clamps. Position and velocity servo gear behavior follows the inspected
+reference converter; motor transmission gear multiplies generalized force.
+
+Native Python bindings expose actuator metadata/names, held controls,
+`set_controls`, and `step_controls`. To retain this feedback ownership in Sard,
+keep the loaded native world, step it once, and publish its solved poses into
+visual-only entities. Moving the world into `PhysicsWorld` does not itself retain
+the loader's actuator controller.
+
 ## RGB, depth, and segmentation
 
 `SensorCamera` owns offscreen targets but no physics state. Pass an explicit
@@ -103,8 +185,10 @@ shadows. It is separate from material-driven PBR rendering.
 ## Published native dependency and local development
 
 Both native crates use the reachable Tessera Git revision
-`95213c183d4cf59f0f2d4b36c3e6a6e86a08e7d5`. It includes native IK,
-Neo-Hookean sand, scene wrench/impulse methods, and topology preservation.
+`196f9830e74fbecc92c89e22d4539ef14b130d09`. It includes native IK,
+Neo-Hookean sand, scene wrench/impulse methods, topology preservation, MJCF
+actuators, resident motor targets/delays, selected reset templates, contact
+observations, and configurable contact recovery/warmstarting.
 Ordinary builds require no local patch.
 
 For local verification without a persistent manifest override, use both
