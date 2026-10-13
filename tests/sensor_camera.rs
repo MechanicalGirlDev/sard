@@ -224,7 +224,7 @@ fn write_capture(path: &str, width: u32, height: u32, rgb: &[u8]) {
     bmp[26..28].copy_from_slice(&1_u16.to_le_bytes());
     bmp[28..30].copy_from_slice(&32_u16.to_le_bytes());
     for row in rgb.chunks_exact(width as usize * 3).rev() {
-        for pixel in row.chunks_exact(3) {
+        for pixel in row.as_chunks::<3>().0 {
             bmp.extend_from_slice(&[pixel[2], pixel[1], pixel[0], 255]);
         }
     }

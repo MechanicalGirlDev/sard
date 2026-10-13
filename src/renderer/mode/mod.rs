@@ -503,7 +503,7 @@ fn scene_triangles(objects: &[RenderObject<'_>]) -> Result<Vec<GpuTriangle>, Ren
                 "expected aligned normals and triangle-list indices",
             ));
         }
-        for indices in mesh.indices.chunks_exact(3) {
+        for indices in mesh.indices.as_chunks::<3>().0 {
             let mut positions = [[0.0; 4]; 3];
             let mut normals = [[0.0; 4]; 3];
             for (corner, &index) in indices.iter().enumerate() {

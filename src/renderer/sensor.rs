@@ -466,7 +466,9 @@ impl SensorCamera {
                 0 => {
                     frame.rgb = Some(
                         bytes
-                            .chunks_exact(4)
+                            .as_chunks::<4>()
+                            .0
+                            .iter()
                             .flat_map(|pixel| pixel[..3].iter().copied())
                             .collect(),
                     );
@@ -474,20 +476,20 @@ impl SensorCamera {
                 1 => {
                     frame.depth = Some(
                         bytes
-                            .chunks_exact(4)
-                            .map(|pixel| {
-                                f32::from_le_bytes([pixel[0], pixel[1], pixel[2], pixel[3]])
-                            })
+                            .as_chunks::<4>()
+                            .0
+                            .iter()
+                            .map(|pixel| f32::from_le_bytes(*pixel))
                             .collect(),
                     );
                 }
                 2 => {
                     frame.segmentation = Some(
                         bytes
-                            .chunks_exact(4)
-                            .map(|pixel| {
-                                u32::from_le_bytes([pixel[0], pixel[1], pixel[2], pixel[3]])
-                            })
+                            .as_chunks::<4>()
+                            .0
+                            .iter()
+                            .map(|pixel| u32::from_le_bytes(*pixel))
                             .collect(),
                     );
                 }

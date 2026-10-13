@@ -551,7 +551,7 @@ fn capture(name: &str, width: u32, height: u32, rgba: &[u8]) {
         bmp.extend(1_u16.to_le_bytes());
         bmp.extend(32_u16.to_le_bytes());
         bmp.extend([0; 24]);
-        for p in rgba.chunks_exact(4) {
+        for p in rgba.as_chunks::<4>().0 {
             bmp.extend([p[2], p[1], p[0], 255]);
         }
         std::fs::write(
@@ -645,8 +645,12 @@ fn visual_scene_renders_every_mode_from_three_angles_and_two_sizes() {
                 let frame = pixels(&ctx, &target);
 
                 // Then: captures contain visible geometry, not an empty or uniform frame.
-                assert!(frame.chunks_exact(4).any(|p| p[0] > 50 && p[0] > p[2]));
-                assert!(frame.chunks_exact(4).all(|p| p[3] == 255));
+                assert!(frame
+                    .as_chunks::<4>()
+                    .0
+                    .iter()
+                    .any(|p| p[0] > 50 && p[0] > p[2]));
+                assert!(frame.as_chunks::<4>().0.iter().all(|p| p[3] == 255));
                 capture(
                     &format!("{mode:?}-{width}x{height}-{angle}"),
                     width,
