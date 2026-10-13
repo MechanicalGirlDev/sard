@@ -80,6 +80,20 @@ struct App<S, F> {
     cursor: Cursor,
 }
 
+fn handle_close_request(
+    defer_close: bool,
+    events: &mut Vec<Event>,
+    exit: impl FnOnce(),
+    redraw: impl FnOnce(),
+) {
+    if defer_close {
+        events.push(Event::CloseRequested);
+        redraw();
+    } else {
+        exit();
+    }
+}
+
 impl<S, F> ApplicationHandler for App<S, F>
 where
     F: FnMut(&mut S, FrameInput<'_>) -> FrameOutput + 'static,
@@ -197,7 +211,12 @@ where
 
         match event {
             WindowEvent::CloseRequested => {
-                event_loop.exit();
+                handle_close_request(
+                    self.settings.defer_close,
+                    &mut self.events,
+                    || event_loop.exit(),
+                    || graphics.window.request_redraw(),
+                );
             }
             WindowEvent::ModifiersChanged(m) => {
                 let st = m.state();
@@ -420,4 +439,56 @@ pub fn screen_target<'a>(input: &'a FrameInput<'a>) -> RenderTarget<'a> {
         input.viewport.height,
         input.surface_format,
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn default_close_exits_without_queuing_or_redrawing() {
+        let settings = WindowSettings::default();
+        assert!(!settings.defer_close);
+        let mut events = Vec::new();
+        let mut exits = 0;
+        let mut redraws = 0;
+        handle_close_request(
+            settings.defer_close,
+            &mut events,
+            || exits += 1,
+            || redraws += 1,
+        );
+        assert_eq!(exits, 1);
+        assert_eq!(redraws, 0);
+        assert!(events.is_empty());
+    }
+
+    #[test]
+    fn deferred_close_queues_app_event_and_redraws_without_exiting() {
+        let settings = WindowSettings::new().defer_close(true);
+        let mut events = vec![Event::Resize {
+            width: 320,
+            height: 240,
+        }];
+        let mut exits = 0;
+        let mut redraws = 0;
+        handle_close_request(
+            settings.defer_close,
+            &mut events,
+            || exits += 1,
+            || redraws += 1,
+        );
+        assert_eq!(exits, 0);
+        assert_eq!(redraws, 1);
+        let callback_events = std::mem::take(&mut events);
+        assert!(events.is_empty());
+        assert_eq!(callback_events.len(), 2);
+        assert!(matches!(callback_events[0], Event::Resize { .. }));
+        assert!(matches!(callback_events[1], Event::CloseRequested));
+        let mut close = callback_events[1].clone();
+        assert!(!close.is_handled());
+        close.set_handled();
+        assert!(!close.is_handled());
+        assert!(!settings.defer_close(false).defer_close);
+    }
 }

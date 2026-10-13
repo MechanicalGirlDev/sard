@@ -305,6 +305,10 @@ pub enum Event {
 
     /// Window resized.
     Resize { width: u32, height: u32 },
+
+    /// The OS requested closure while [`super::WindowSettings::defer_close`] is enabled.
+    /// The app remains alive until it returns `FrameOutput::exit` or `WindowCommand::Close`.
+    CloseRequested,
 }
 
 impl Event {
@@ -317,7 +321,7 @@ impl Event {
             | Self::MouseWheel { handled, .. }
             | Self::KeyPress { handled, .. }
             | Self::KeyRelease { handled, .. } => *handled,
-            Self::Text { .. } | Self::Resize { .. } => false,
+            Self::Text { .. } | Self::Resize { .. } | Self::CloseRequested => false,
         }
     }
 
@@ -330,7 +334,7 @@ impl Event {
             | Self::MouseWheel { handled, .. }
             | Self::KeyPress { handled, .. }
             | Self::KeyRelease { handled, .. } => *handled = true,
-            Self::Text { .. } | Self::Resize { .. } => {}
+            Self::Text { .. } | Self::Resize { .. } | Self::CloseRequested => {}
         }
     }
 }

@@ -223,7 +223,7 @@ impl Gui {
                     let _ = self.keys_down.remove(key);
                 }
                 Event::Text { text } => self.typed.push_str(text),
-                Event::Resize { .. } => {}
+                Event::Resize { .. } | Event::CloseRequested => {}
             }
         }
 

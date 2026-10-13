@@ -222,6 +222,71 @@ fn menu_opens_and_blocks() {
     assert!(!s.picked);
 }
 
+#[test]
+fn disabled_menu_row_does_not_activate_or_close_popup() {
+    let Some(ctx) = gpu() else { return };
+    let mut gui = Gui::new(&ctx, wgpu::TextureFormat::Rgba8Unorm);
+    let mut clicks = [0, 0];
+    fn build(ui: &mut Ui<'_>, clicks: &mut [u32; 2]) -> [Vec2; 3] {
+        let mut positions = [Vec2::ZERO; 3];
+        ui.menu_bar(|ui| {
+            let before = ui.cursor();
+            let row_height = ui.style().row_height;
+            positions[0] = before + Vec2::new(20.0, row_height * 0.5);
+            // Popup rows begin below the title, inside its 1px border and 2px padding.
+            positions[1] = before + Vec2::new(20.0, row_height * 1.5 + 3.0);
+            positions[2] = positions[1] + Vec2::new(0.0, row_height);
+            ui.menu("File", |menu| {
+                menu.set_enabled(false);
+                clicks[0] += u32::from(menu.item("Unavailable"));
+                menu.set_enabled(true);
+                clicks[1] += u32::from(menu.item_shortcut("Open", "Ctrl+O"));
+            });
+        });
+        positions
+    }
+    let mut positions = [Vec2::ZERO; 3];
+    frame(&mut gui, &[], |ui| positions = build(ui, &mut clicks));
+    let [title, disabled, enabled] = positions;
+    for events in [
+        vec![motion(title.x, title.y), press(title.x, title.y)],
+        vec![release(title.x, title.y)],
+        vec![],
+        vec![
+            motion(disabled.x, disabled.y),
+            press(disabled.x, disabled.y),
+        ],
+        vec![release(disabled.x, disabled.y)],
+    ] {
+        frame(&mut gui, &events, |ui| {
+            build(ui, &mut clicks);
+        });
+    }
+    assert!(gui.any_popup_open());
+    assert_eq!(clicks, [0, 0]);
+    frame(
+        &mut gui,
+        &[motion(enabled.x, enabled.y), press(enabled.x, enabled.y)],
+        |ui| {
+            build(ui, &mut clicks);
+        },
+    );
+    frame(&mut gui, &[release(enabled.x, enabled.y)], |ui| {
+        build(ui, &mut clicks);
+    });
+    assert_eq!(clicks, [0, 1]);
+    // A release closes the menu while its rectangle is still registered for that
+    // frame. Two ordinary frame boundaries expire current and previous rectangles.
+    frame(&mut gui, &[], |ui| {
+        build(ui, &mut clicks);
+    });
+    frame(&mut gui, &[], |ui| {
+        build(ui, &mut clicks);
+    });
+    assert!(!gui.any_popup_open());
+    assert_eq!(clicks, [0, 1]);
+}
+
 struct Panels {
     shown: Vec<String>,
 }

@@ -22,6 +22,11 @@ pub struct Menu<'a, 'g> {
 }
 
 impl Menu<'_, '_> {
+    /// Enable or disable rows built after this call. Disabled rows cannot be activated.
+    pub fn set_enabled(&mut self, enabled: bool) {
+        self.ui.set_enabled(enabled);
+    }
+
     /// A menu item. Returns `true` when clicked (the menu closes).
     pub fn item(&mut self, text: &str) -> bool {
         self.item_shortcut(text, "")

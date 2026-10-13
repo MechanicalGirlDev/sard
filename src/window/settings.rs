@@ -20,6 +20,9 @@ pub struct WindowSettings {
     /// Whether the OS draws the title bar and borders. `false` for a client-side title
     /// bar: drive moves / resizes / buttons through `FrameOutput::window`.
     pub decorations: bool,
+    /// Deliver OS close requests as [`super::Event::CloseRequested`] instead of exiting.
+    /// The app must confirm closure with `FrameOutput::exit` or `WindowCommand::Close`.
+    pub defer_close: bool,
 }
 
 impl Default for WindowSettings {
@@ -32,6 +35,7 @@ impl Default for WindowSettings {
             maximized: false,
             fullscreen: false,
             decorations: true,
+            defer_close: false,
         }
     }
 }
@@ -81,6 +85,13 @@ impl WindowSettings {
     /// Set whether the OS draws the window frame.
     pub fn decorations(mut self, decorations: bool) -> Self {
         self.decorations = decorations;
+        self
+    }
+
+    /// Defer OS close requests to the frame callback for confirmation.
+    /// Disabled by default; explicit app exit commands always close the window.
+    pub fn defer_close(mut self, defer_close: bool) -> Self {
+        self.defer_close = defer_close;
         self
     }
 }
