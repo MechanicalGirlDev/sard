@@ -5,6 +5,7 @@
 mod axes;
 mod bounds;
 mod circle;
+mod data;
 mod instanced;
 mod lines;
 mod mesh;
@@ -17,6 +18,7 @@ mod terrain;
 pub use axes::Axes;
 pub use bounds::BoundingBoxMesh;
 pub use circle::Circle;
+pub use data::{MeshAsset, MeshData, MeshHandle, ObjError};
 pub use instanced::InstancedMesh;
 pub use lines::{LineStrip, Lines};
 pub use mesh::Mesh;

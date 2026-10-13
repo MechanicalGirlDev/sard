@@ -7,6 +7,7 @@
 - **wgpu backend** - Cross-platform graphics with WebGPU
 - **PBR materials** - Physically-based rendering with Phong and PBR materials
 - **Shadow mapping** - Directional light shadows
+- **Switchable rendering** - PBR/shadow maps, GPU ray tracing, and progressive path tracing on one scene
 - **Post-processing effects** - FXAA, fog, and extensible effect chain
 - **Camera controls** - Orbit, fly, and first-person controls
 - **URDF support** - Load robot models from URDF files
@@ -41,6 +42,9 @@ sard = "0.1.1"
 | `full` | No | Engine, rigid/MPM CPU and GPU physics, and GUI |
 
 ## Architecture
+
+See [Rendering modes](docs/rendering-modes.md) for `Renderer`, shared scene
+snapshots, and switching between rasterization, ray tracing and path tracing.
 
 The library is organized into layers:
 

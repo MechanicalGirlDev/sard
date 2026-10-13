@@ -80,6 +80,9 @@ pub use renderer::{
     TerrainMaterial, TerrainUniform, UVMaterial, UnlitMaterial,
 };
 
+pub use renderer::{
+    RenderConfig, RenderError, RenderLighting, RenderMode, RenderObject, Renderer, SurfaceMaterial,
+};
 pub use urdf::{RobotModel, UrdfLoader};
 
 pub use effect::{CopyEffect, Effect, EffectChain, FogEffect, FogMode, FullscreenQuad, FxaaEffect};

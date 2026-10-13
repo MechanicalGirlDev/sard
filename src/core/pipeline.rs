@@ -147,6 +147,10 @@ impl<'a> PipelineBuilder<'a> {
             || DepthState::default().to_wgpu(DepthTexture::FORMAT),
             |state| state.to_wgpu(DepthTexture::FORMAT),
         );
+        let depth_stencil = wgpu::DepthStencilState {
+            bias: self.depth_bias,
+            ..depth_stencil
+        };
 
         let pipeline = self
             .ctx

@@ -11,6 +11,7 @@ use glam::Vec3;
 
 /// A mesh with vertex and index data.
 pub struct Mesh {
+    data: super::MeshData,
     vertex_buffer: VertexBuffer,
     index_buffer: Option<IndexBuffer>,
     draw_count: u32,
@@ -38,6 +39,11 @@ impl Mesh {
         let aabb = Aabb::from_points(vertices.iter().map(|v| Vec3::from(v.position)));
 
         Self {
+            data: super::MeshData {
+                positions: vertices.iter().map(|v| Vec3::from(v.position)).collect(),
+                normals: vertices.iter().map(|v| Vec3::from(v.normal)).collect(),
+                indices: indices.map_or_else(|| (0..draw_count).collect(), <[u32]>::to_vec),
+            },
             vertex_buffer,
             index_buffer,
             draw_count,
@@ -60,11 +66,21 @@ impl Mesh {
             (None, vertices.len() as u32)
         };
         Self {
+            data: super::MeshData {
+                positions: vertices.iter().map(|v| Vec3::from(v.position)).collect(),
+                normals: vertices.iter().map(|v| Vec3::from(v.normal)).collect(),
+                indices: indices.map_or_else(|| (0..draw_count).collect(), <[u32]>::to_vec),
+            },
             vertex_buffer,
             index_buffer,
             draw_count,
             aabb: Aabb::from_points(vertices.iter().map(|vertex| Vec3::from(vertex.position))),
         }
+    }
+
+    /// CPU triangle data shared by the switchable rendering backends.
+    pub fn mesh_data(&self) -> &super::MeshData {
+        &self.data
     }
 
     /// Create a cube mesh.

@@ -8,6 +8,7 @@ pub mod culling;
 pub mod geometry;
 pub mod light;
 pub mod material;
+pub mod mode;
 pub mod object;
 pub mod sensor;
 pub mod shadow;
@@ -25,6 +26,9 @@ pub use material::{
     ColorMaterial, DepthMaterial, GridMaterial, LineMaterial, Material, ModelUniform,
     NormalMaterial, PbrMaterial, PhongMaterial, PositionMaterial, SpriteMaterial, TerrainMaterial,
     TerrainUniform, UVMaterial, UnlitMaterial,
+};
+pub use mode::{
+    RenderConfig, RenderError, RenderLighting, RenderMode, RenderObject, Renderer, SurfaceMaterial,
 };
 pub use object::{Gm, Object};
 pub use sensor::{

@@ -22,6 +22,10 @@ per primitive type, retains CPU mesh data for picking, and can render into a win
 target, or XR eye.
 
 The two APIs intentionally share foundational types such as `Viewer`, `RenderTarget`, and `Aabb`.
+CPU triangle data and uploaded mesh assets live in `renderer::geometry` and are re-exported
+by `scene`, so both APIs can supply the same data without an upward dependency.
+`renderer::mode::Renderer` owns switchable raster, ray-tracing and path-tracing backends.
+Its shared opaque PBR scene contract and accumulation rules are in [Rendering modes](rendering-modes.md).
 New low-level rendering utilities should be placed in `core` or a private common module instead of
 being duplicated between `renderer` and `scene`.
 
