@@ -15,6 +15,8 @@ use crate::ecs::components::physics::{ColliderMaterial, RigidBody};
 use crate::ecs::components::transform::{GlobalTransform, Transform};
 
 pub use nalgebra;
+mod contact_sensor;
+pub use contact_sensor::{ContactImpulseSensor, ContactObservationError};
 /// Native CPU/GPU particles, materials, emitters, resident sessions, and couplers.
 #[cfg(feature = "mpm")]
 pub use tessera_mpm as mpm;
@@ -37,8 +39,11 @@ pub use tessera_physics::gpu_contact_pipeline::GpuContactDevice;
 #[cfg(feature = "gpu-physics")]
 pub mod gpu {
     pub use tessera_physics::{
-        gpu_point_query as point_query, gpu_ray_query as ray_query, gpu_rigid_ball_joint as joints,
-        gpu_rigid_shape as shape, gpu_rigid_sphere_world as rigid, gpu_rigid_state as state,
+        gpu_articulated_dynamics as articulated, gpu_articulated_state as articulated_state,
+        gpu_contact_policy as contact_policy, gpu_contact_sensor as contact_sensors,
+        gpu_motor_target as controls, gpu_point_query as point_query, gpu_ray_query as ray_query,
+        gpu_rigid_ball_joint as joints, gpu_rigid_shape as shape, gpu_rigid_sphere_world as rigid,
+        gpu_rigid_state as state, wgpu,
     };
 }
 

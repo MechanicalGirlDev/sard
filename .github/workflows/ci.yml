@@ -42,8 +42,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - name: Install Vulkan software compute driver
         run: sudo apt-get update && sudo apt-get install -y mesa-vulkan-drivers
-      - run: cargo test --lib --all-features -- --test-threads=1
-      - run: cargo test --test sensor_camera --all-features -- --test-threads=1
+      - run: cargo test --all-features -- --test-threads=1
 
   check-features:
     name: Check feature combinations

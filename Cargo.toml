@@ -47,8 +47,8 @@ urdf-rs = "0.9.0"
 hecs = { version = "0.11.1", optional = true }
 
 # Physics (optional)
-tessera-physics = { git = "https://github.com/MechanicalGirlDev/tessera", rev = "95213c183d4cf59f0f2d4b36c3e6a6e86a08e7d5", optional = true }
-tessera-mpm = { git = "https://github.com/MechanicalGirlDev/tessera", rev = "95213c183d4cf59f0f2d4b36c3e6a6e86a08e7d5", optional = true }
+tessera-physics = { git = "https://github.com/MechanicalGirlDev/tessera", rev = "196f9830e74fbecc92c89e22d4539ef14b130d09", optional = true }
+tessera-mpm = { git = "https://github.com/MechanicalGirlDev/tessera", rev = "196f9830e74fbecc92c89e22d4539ef14b130d09", optional = true }
 nalgebra = { version = "0.30", optional = true }
 
 # Utilities

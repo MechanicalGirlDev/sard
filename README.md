@@ -63,7 +63,7 @@ and guidance on choosing between them.
 ### Physics
 
 Physics is provided by [Tessera](https://github.com/MechanicalGirlDev/tessera),
-pinned to Git revision `95213c183d4cf59f0f2d4b36c3e6a6e86a08e7d5`.
+pinned to Git revision `196f9830e74fbecc92c89e22d4539ef14b130d09`.
 Sard contains no collision detector, contact solver, integrator, or physics compute shader.
 Its `PhysicsWorld` registers native Tessera `SceneBody` ECS components, steps Tessera,
 and copies solved poses into optional rendering transforms. `from_tessera` also accepts
