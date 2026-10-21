@@ -2415,7 +2415,7 @@ dependencies = [
  "nalgebra",
  "pollster 1.0.1",
  "tessera-mpm",
- "tessera-physics",
+ "tessera-physics 0.1.4 (git+https://github.com/MechanicalGirlDev/tessera?rev=7959dfe9434905e7234629a8faa6a0f594420a9b)",
  "thiserror 2.0.20",
  "tracing",
  "urdf-rs",
@@ -2775,7 +2775,7 @@ dependencies = [
  "bytemuck",
  "futures-channel",
  "nalgebra",
- "tessera-physics",
+ "tessera-physics 0.1.4 (git+https://github.com/MechanicalGirlDev/tessera?rev=196f9830e74fbecc92c89e22d4539ef14b130d09)",
  "thiserror 2.0.20",
  "wgpu 28.0.0",
 ]
@@ -2784,6 +2784,20 @@ dependencies = [
 name = "tessera-physics"
 version = "0.1.4"
 source = "git+https://github.com/MechanicalGirlDev/tessera?rev=196f9830e74fbecc92c89e22d4539ef14b130d09#196f9830e74fbecc92c89e22d4539ef14b130d09"
+dependencies = [
+ "bytemuck",
+ "nalgebra",
+ "pollster 0.4.0",
+ "quick-xml 0.36.2",
+ "thiserror 2.0.20",
+ "urdf-rs",
+ "wgpu 28.0.0",
+]
+
+[[package]]
+name = "tessera-physics"
+version = "0.1.4"
+source = "git+https://github.com/MechanicalGirlDev/tessera?rev=7959dfe9434905e7234629a8faa6a0f594420a9b#7959dfe9434905e7234629a8faa6a0f594420a9b"
 dependencies = [
  "bytemuck",
  "nalgebra",
