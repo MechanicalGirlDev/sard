@@ -299,7 +299,7 @@ name = "camera_controls"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "glam",
+ "glam 0.33.8",
  "sard",
 ]
 
@@ -664,7 +664,7 @@ name = "ecs_scene"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "glam",
+ "glam 0.33.8",
  "hecs",
  "sard",
 ]
@@ -680,7 +680,7 @@ name = "engine_app"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "glam",
+ "glam 0.33.8",
  "hecs",
  "sard",
 ]
@@ -730,7 +730,7 @@ name = "fog_effect"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "glam",
+ "glam 0.33.8",
  "sard",
  "wgpu 30.0.1",
 ]
@@ -894,6 +894,24 @@ dependencies = [
 
 [[package]]
 name = "glam"
+version = "0.30.10"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "19fc433e8437a212d1b6f1e68c7824af3aed907da60afa994e7f542d18d12aa9"
+
+[[package]]
+name = "glam"
+version = "0.31.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "556f6b2ea90b8d15a74e0e7bb41671c9bdf38cd9f78c284d750b9ce58a2b5be7"
+
+[[package]]
+name = "glam"
+version = "0.32.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f70749695b063ecbf6b62949ccccde2e733ec3ecbbd71d467dca4e5c6c97cca0"
+
+[[package]]
+name = "glam"
 version = "0.33.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a0990707078259d76f65619a692e87c82645be66cbee224173cd1af151e54ba2"
@@ -971,7 +989,7 @@ name = "gui_demo"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "glam",
+ "glam 0.33.8",
  "sard",
 ]
 
@@ -1045,7 +1063,7 @@ name = "hello_cube"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "glam",
+ "glam 0.33.8",
  "sard",
 ]
 
@@ -1112,7 +1130,7 @@ name = "instanced_rendering"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "glam",
+ "glam 0.33.8",
  "sard",
 ]
 
@@ -1266,7 +1284,7 @@ name = "lighting_demo"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "glam",
+ "glam 0.33.8",
  "sard",
 ]
 
@@ -1329,7 +1347,7 @@ name = "mass_physics"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "glam",
+ "glam 0.33.8",
  "hecs",
  "sard",
 ]
@@ -1339,7 +1357,7 @@ name = "materials_showcase"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "glam",
+ "glam 0.33.8",
  "sard",
 ]
 
@@ -1455,11 +1473,31 @@ checksum = "4fb2d0de08694bed883320212c18ee3008576bfe8c306f4c3c4a58b4876998be"
 dependencies = [
  "approx",
  "matrixmultiply",
- "nalgebra-macros",
+ "nalgebra-macros 0.1.0",
  "num-complex",
  "num-rational",
  "num-traits",
- "simba",
+ "simba 0.7.3",
+ "typenum",
+]
+
+[[package]]
+name = "nalgebra"
+version = "0.35.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "adc43a60c217b0c6ff46e47f26911015ad8d2e5a8be1af668c67e370d99a4346"
+dependencies = [
+ "approx",
+ "glam 0.30.10",
+ "glam 0.31.1",
+ "glam 0.32.1",
+ "glam 0.33.8",
+ "matrixmultiply",
+ "nalgebra-macros 0.3.0",
+ "num-complex",
+ "num-rational",
+ "num-traits",
+ "simba 0.10.2",
  "typenum",
 ]
 
@@ -1472,6 +1510,17 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 1.0.109",
+]
+
+[[package]]
+name = "nalgebra-macros"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "973e7178a678cfd059ccec50887658d482ce16b0aa9da3888ddeab5cd5eb4889"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.119",
 ]
 
 [[package]]
@@ -1509,8 +1558,18 @@ name = "normals"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "glam",
+ "glam 0.33.8",
  "sard",
+]
+
+[[package]]
+name = "num-bigint"
+version = "0.4.8"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c89e69e7e0f03bea5ef08013795c25018e101932225a656383bd384495ecc367"
+dependencies = [
+ "num-integer",
+ "num-traits",
 ]
 
 [[package]]
@@ -1537,6 +1596,7 @@ version = "0.4.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f83d14da390562dca69fc84082e73e548e1ad308d24accdedd2720017cb37824"
 dependencies = [
+ "num-bigint",
  "num-integer",
  "num-traits",
 ]
@@ -1943,7 +2003,7 @@ name = "particles"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "glam",
+ "glam 0.33.8",
  "sard",
 ]
 
@@ -1958,7 +2018,7 @@ name = "pbr"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "glam",
+ "glam 0.33.8",
  "sard",
 ]
 
@@ -1973,7 +2033,7 @@ name = "physics_demo"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "glam",
+ "glam 0.33.8",
  "hecs",
  "sard",
 ]
@@ -2049,7 +2109,7 @@ name = "point_cloud"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "glam",
+ "glam 0.33.8",
  "sard",
 ]
 
@@ -2395,6 +2455,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "safe_arch"
+version = "1.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "42c6efa15875e6ecb39ca61fb0b0c1a40b84fac5a5ffe71eef7d1000c8eb3f5f"
+dependencies = [
+ "bytemuck",
+]
+
+[[package]]
 name = "same-file"
 version = "1.0.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2409,10 +2478,10 @@ version = "0.1.1"
 dependencies = [
  "anyhow",
  "bytemuck",
- "glam",
+ "glam 0.33.8",
  "glyphon",
  "hecs",
- "nalgebra",
+ "nalgebra 0.35.0",
  "pollster 1.0.1",
  "tessera-mpm",
  "tessera-physics",
@@ -2531,7 +2600,7 @@ name = "shapes2d"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "glam",
+ "glam 0.33.8",
  "sard",
 ]
 
@@ -2551,7 +2620,19 @@ dependencies = [
  "num-complex",
  "num-traits",
  "paste",
- "wide",
+ "wide 0.7.33",
+]
+
+[[package]]
+name = "simba"
+version = "0.10.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f1a7200d82ff1c7b4235efd12f11e2537a402c91cf83a5cb97ce80eef787fde7"
+dependencies = [
+ "approx",
+ "num-complex",
+ "num-traits",
+ "wide 1.7.1",
 ]
 
 [[package]]
@@ -2680,7 +2761,7 @@ name = "sprites"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "glam",
+ "glam 0.33.8",
  "sard",
 ]
 
@@ -2763,7 +2844,7 @@ name = "terrain"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "glam",
+ "glam 0.33.8",
  "sard",
 ]
 
@@ -2774,7 +2855,7 @@ source = "git+https://github.com/MechanicalGirlDev/tessera?rev=196f9830e74fbecc9
 dependencies = [
  "bytemuck",
  "futures-channel",
- "nalgebra",
+ "nalgebra 0.30.1",
  "tessera-physics",
  "thiserror 2.0.20",
  "wgpu 28.0.0",
@@ -2786,7 +2867,7 @@ version = "0.1.4"
 source = "git+https://github.com/MechanicalGirlDev/tessera?rev=196f9830e74fbecc92c89e22d4539ef14b130d09#196f9830e74fbecc92c89e22d4539ef14b130d09"
 dependencies = [
  "bytemuck",
- "nalgebra",
+ "nalgebra 0.30.1",
  "pollster 0.4.0",
  "quick-xml 0.36.2",
  "thiserror 2.0.20",
@@ -2799,7 +2880,7 @@ name = "texture"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "glam",
+ "glam 0.33.8",
  "sard",
 ]
 
@@ -3015,7 +3096,7 @@ name = "urdf_robot"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "glam",
+ "glam 0.33.8",
  "sard",
 ]
 
@@ -3540,7 +3621,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0ce5da8ecb62bcd8ec8b7ea19f69a51275e91299be594ea5cc6ef7819e16cd03"
 dependencies = [
  "bytemuck",
- "safe_arch",
+ "safe_arch 0.7.4",
+]
+
+[[package]]
+name = "wide"
+version = "1.7.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d920ac99c3c8edce110cb8d07dbb324d6d026011dce85b1e9355b70f0adacc4f"
+dependencies = [
+ "bytemuck",
+ "safe_arch 1.2.0",
 ]
 
 [[package]]
@@ -3841,7 +3932,7 @@ name = "wireframe"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "glam",
+ "glam 0.33.8",
  "sard",
 ]
 
