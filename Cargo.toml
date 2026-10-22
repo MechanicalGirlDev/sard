@@ -49,7 +49,7 @@ hecs = { version = "0.11.1", optional = true }
 # Physics (optional)
 tessera-physics = { git = "https://github.com/MechanicalGirlDev/tessera", rev = "196f9830e74fbecc92c89e22d4539ef14b130d09", optional = true }
 tessera-mpm = { git = "https://github.com/MechanicalGirlDev/tessera", rev = "196f9830e74fbecc92c89e22d4539ef14b130d09", optional = true }
-nalgebra = { version = "0.30", optional = true }
+nalgebra = { version = "0.35", optional = true }
 
 # Utilities
 tracing = "0.1.44"
