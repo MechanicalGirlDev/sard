@@ -102,7 +102,7 @@ fn native_scroll_panel_renders_in_both_themes_and_viewport_sizes() -> anyhow::Re
                     bmp[22..26].copy_from_slice(&(-320_i32).to_le_bytes());
                     bmp[26..28].copy_from_slice(&1_u16.to_le_bytes());
                     bmp[28..30].copy_from_slice(&32_u16.to_le_bytes());
-                    for pixel in pixels.chunks_exact(4) {
+                    for pixel in pixels.as_chunks::<4>().0 {
                         bmp.extend_from_slice(&[pixel[2], pixel[1], pixel[0], pixel[3]]);
                     }
                     std::fs::write(directory.join(name), bmp)?;

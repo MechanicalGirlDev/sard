@@ -30,8 +30,16 @@ fn text_layers_match_separately_submitted_passes() -> anyhow::Result<()> {
     ctx.submit([encoder.finish()]);
     let actual = combined.read_pixels(&ctx);
     let expected = reference.read_pixels(&ctx);
-    anyhow::ensure!(expected.chunks_exact(4).any(|p| p[0] > 0 && p[1] == 0));
-    anyhow::ensure!(expected.chunks_exact(4).any(|p| p[1] > 0 && p[0] == 0));
+    anyhow::ensure!(expected
+        .as_chunks::<4>()
+        .0
+        .iter()
+        .any(|p| p[0] > 0 && p[1] == 0));
+    anyhow::ensure!(expected
+        .as_chunks::<4>()
+        .0
+        .iter()
+        .any(|p| p[1] > 0 && p[0] == 0));
     let mismatch = actual
         .iter()
         .zip(&expected)

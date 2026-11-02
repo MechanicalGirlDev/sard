@@ -37,8 +37,48 @@ fn press_origin_does_not_follow_later_pointer_events() -> anyhow::Result<()> {
     );
     let a = gui.interact(source, Rect::new(0.0, 0.0, 50.0, 50.0), Sense::DRAG);
     let b = gui.interact(target, Rect::new(100.0, 0.0, 50.0, 50.0), Sense::CLICK);
+    let press_position = gui.mouse_press_position(MouseButton::Left);
+    anyhow::ensure!(press_position == Vec2::new(10.0, 10.0));
     anyhow::ensure!(a.pressed && a.drag_released && !a.clicked);
     anyhow::ensure!(!b.pressed && !b.clicked);
+    Ok(())
+}
+
+#[test]
+fn press_position_is_button_specific_through_hold_and_release() -> anyhow::Result<()> {
+    let ctx = WgpuContext::new_blocking(None)?;
+    let mut gui = Gui::new(&ctx, wgpu::TextureFormat::Rgba8Unorm);
+    let buttons = [
+        (MouseButton::Left, Vec2::new(10.0, 20.0)),
+        (MouseButton::Middle, Vec2::new(30.0, 40.0)),
+        (MouseButton::Right, Vec2::new(50.0, 60.0)),
+    ];
+    let mut events: Vec<_> = buttons
+        .iter()
+        .map(|&(button, position)| Event::MousePress {
+            button,
+            position: position.into(),
+            modifiers: Modifiers::default(),
+            handled: false,
+        })
+        .collect();
+    events.push(Event::MouseMotion {
+        position: (70.0, 80.0),
+        delta: (20.0, 20.0),
+        modifiers: Modifiers::default(),
+        handled: false,
+    });
+    gui.begin_frame(&events, 200, 100, 0.016);
+    for (button, position) in buttons {
+        anyhow::ensure!(gui.mouse_press_position(button) == position);
+    }
+    gui.begin_frame(&[pointer((90.0, 90.0), false)], 200, 100, 0.016);
+    anyhow::ensure!(gui.mouse_press_position(MouseButton::Left) == Vec2::new(10.0, 20.0));
+    gui.begin_frame(&[], 200, 100, 0.016);
+    anyhow::ensure!(gui.mouse_press_position(MouseButton::Left) == Vec2::new(90.0, 90.0));
+    for (button, position) in &buttons[1..] {
+        anyhow::ensure!(gui.mouse_press_position(*button) == *position);
+    }
     Ok(())
 }
 

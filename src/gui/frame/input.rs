@@ -162,6 +162,13 @@ impl Gui {
         self.press_origin[button_index(button)]
     }
 
+    /// Position where `button`'s current gesture began, through its release frame.
+    /// With no current gesture, returns the current pointer position. Use
+    /// [`Self::mouse_press_origin`] when the absence of a gesture matters.
+    pub fn mouse_press_position(&self, button: MouseButton) -> Vec2 {
+        self.mouse_press_origin(button).unwrap_or(self.mouse)
+    }
+
     /// Whether `button` went up this frame.
     pub fn mouse_released(&self, button: MouseButton) -> bool {
         self.released[button_index(button)]

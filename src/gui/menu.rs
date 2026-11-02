@@ -22,6 +22,13 @@ pub struct Menu<'a, 'g> {
 }
 
 impl Menu<'_, '_> {
+    /// A noninteractive group heading, clipped to the menu width.
+    /// It does not change the menu's enabled state or close the popup.
+    pub fn heading(&mut self, text: &str) {
+        self.ui.set_next_width(self.width);
+        let _ = self.ui.heading(text);
+    }
+
     /// Enable or disable rows built after this call. Disabled rows cannot be activated.
     pub fn set_enabled(&mut self, enabled: bool) {
         self.ui.set_enabled(enabled);

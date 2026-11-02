@@ -44,6 +44,8 @@ mod editing_tests;
 #[cfg(all(test, feature = "window"))]
 mod interaction_tests;
 #[cfg(all(test, feature = "window"))]
+mod menu_heading_tests;
+#[cfg(all(test, feature = "window"))]
 mod modal_tests;
 #[cfg(all(test, feature = "window"))]
 mod render_tests;
