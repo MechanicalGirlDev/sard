@@ -22,9 +22,14 @@
 //! ```
 
 mod camera;
+#[cfg(test)]
+mod line_render_tests;
+mod lines;
 mod mesh;
+mod object;
 mod offscreen;
 mod pick;
+mod primitives;
 mod renderer;
 #[allow(clippy::module_inception, reason = "`scene::Scene` reads naturally")]
 mod scene;
