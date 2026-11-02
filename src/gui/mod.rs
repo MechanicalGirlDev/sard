@@ -24,7 +24,13 @@ mod frame;
 #[cfg(feature = "window")]
 mod menu;
 #[cfg(feature = "window")]
+mod modal;
+#[cfg(feature = "window")]
 mod plot;
+#[cfg(feature = "window")]
+mod scroll;
+#[cfg(feature = "window")]
+mod tree_drag;
 #[cfg(feature = "window")]
 mod types;
 #[cfg(feature = "window")]
@@ -32,6 +38,17 @@ mod widgets;
 
 #[cfg(all(test, feature = "window"))]
 mod tests;
+
+#[cfg(all(test, feature = "window"))]
+mod editing_tests;
+#[cfg(all(test, feature = "window"))]
+mod interaction_tests;
+#[cfg(all(test, feature = "window"))]
+mod modal_tests;
+#[cfg(all(test, feature = "window"))]
+mod render_tests;
+#[cfg(all(test, feature = "window"))]
+mod visual_tests;
 
 pub use primitive::PrimitiveRenderer;
 pub use style::{linear_to_srgb, over, srgb, srgb_to_linear, with_alpha, Color, Palette, Style};
@@ -48,7 +65,13 @@ pub use frame::{Gui, LAYERS, LAYER_BASE, LAYER_POPUP};
 #[cfg(feature = "window")]
 pub use menu::Menu;
 #[cfg(feature = "window")]
+pub use modal::{ModalDismissal, ModalPolicy};
+#[cfg(feature = "window")]
 pub use plot::{Plot, Series};
+#[cfg(feature = "window")]
+pub use scroll::{ScrollRegion, ScrollRegions, ScrollState};
+#[cfg(feature = "window")]
+pub use tree_drag::{TreeDrag, TreeDrop, TreeDropPosition};
 #[cfg(feature = "window")]
 pub use types::{Align, Dir, Id, Rect, Response, Sense};
 #[cfg(feature = "window")]

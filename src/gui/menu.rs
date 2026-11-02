@@ -133,6 +133,7 @@ impl Ui<'_> {
             );
             let prev = self.gui().layer();
             self.gui().set_layer(LAYER_POPUP);
+            let paint = self.gui().begin_menu_popup_paint();
             let shadow = [
                 self.gui().reserve_rect(),
                 self.gui().reserve_rect(),
@@ -171,6 +172,9 @@ impl Ui<'_> {
                 .fill_reserved(border, outer.expand(1.0), p.line_hard);
             self.gui().fill_reserved(handle, outer, p.popup);
             self.gui().register_popup(outer.expand(1.0));
+            if let Some(paint) = paint {
+                self.gui().finish_anchored_popup_paint(paint);
+            }
             self.gui().set_layer(prev);
         } else {
             self.gui().set_scalar(bar_id.with("open_menu"), 0.0);
@@ -203,6 +207,7 @@ impl Ui<'_> {
         let width = POPUP_MIN_WIDTH;
         let prev = self.gui().layer();
         self.gui().set_layer(LAYER_POPUP);
+        let paint = self.gui().begin_window_popup_paint();
         let border = self.gui().reserve_rect();
         let handle = self.gui().reserve_rect();
         let rect = Rect::from_min_size(at, Vec2::new(width, self.gui().size().y - at.y));
@@ -226,6 +231,9 @@ impl Ui<'_> {
             .fill_reserved(border, outer.expand(1.0), style.palette.line_hard);
         self.gui().fill_reserved(handle, outer, style.palette.popup);
         self.gui().register_popup(outer.expand(1.0));
+        if let Some(paint) = paint {
+            self.gui().finish_anchored_popup_paint(paint);
+        }
         self.gui().set_layer(prev);
     }
 }

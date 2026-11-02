@@ -224,9 +224,6 @@ fn menu_opens_and_blocks() {
 
 #[test]
 fn disabled_menu_row_does_not_activate_or_close_popup() {
-    let Some(ctx) = gpu() else { return };
-    let mut gui = Gui::new(&ctx, wgpu::TextureFormat::Rgba8Unorm);
-    let mut clicks = [0, 0];
     fn build(ui: &mut Ui<'_>, clicks: &mut [u32; 2]) -> [Vec2; 3] {
         let mut positions = [Vec2::ZERO; 3];
         ui.menu_bar(|ui| {
@@ -245,6 +242,9 @@ fn disabled_menu_row_does_not_activate_or_close_popup() {
         });
         positions
     }
+    let Some(ctx) = gpu() else { return };
+    let mut gui = Gui::new(&ctx, wgpu::TextureFormat::Rgba8Unorm);
+    let mut clicks = [0, 0];
     let mut positions = [Vec2::ZERO; 3];
     frame(&mut gui, &[], |ui| positions = build(ui, &mut clicks));
     let [title, disabled, enabled] = positions;

@@ -10,81 +10,36 @@ use glyphon::{
     TextAtlas, TextBounds, TextRenderer as GlyphonTextRenderer, Weight,
 };
 
-/// Per-call text attributes on top of the renderer's family.
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub struct TextStyle {
-    /// Use the monospace family (see [`TextRenderer::set_mono_family`]).
-    pub mono: bool,
-    /// Font weight (CSS scale: 400 normal, 600 semi-bold, 700 bold).
-    pub weight: u16,
-    /// Extra advance per glyph, as a fraction of the font size (CSS `letter-spacing` in em).
-    pub letter_spacing: f32,
-}
-
-impl Default for TextStyle {
-    fn default() -> Self {
-        Self::NORMAL
-    }
-}
-
-impl TextStyle {
-    /// Proportional, normal weight.
-    pub const NORMAL: Self = Self {
-        mono: false,
-        weight: 400,
-        letter_spacing: 0.0,
-    };
-    /// Monospace, normal weight.
-    pub const MONO: Self = Self {
-        mono: true,
-        weight: 400,
-        letter_spacing: 0.0,
-    };
-    /// Proportional, semi-bold.
-    pub const SEMIBOLD: Self = Self {
-        mono: false,
-        weight: 600,
-        letter_spacing: 0.0,
-    };
-
-    /// With `letter_spacing` (em).
-    #[must_use]
-    pub const fn spaced(mut self, letter_spacing: f32) -> Self {
-        self.letter_spacing = letter_spacing;
-        self
-    }
-}
-
 struct TextEntry {
     buffer: Buffer,
     left: f32,
     top: f32,
     color: Color,
     /// Clip bounds `[left, top, right, bottom]` in pixels, or `None` for unclipped.
-    clip: Option<[i32; 4]>,
+    clip: Option<[f32; 4]>,
     /// Draw layer (see `TextRenderer::set_layer`).
     layer: u8,
+}
+
+struct TextLayer {
+    atlas: TextAtlas,
+    renderer: GlyphonTextRenderer,
+    viewport: glyphon::Viewport,
 }
 
 /// Text renderer using glyphon.
 pub struct TextRenderer {
     font_system: FontSystem,
     swash_cache: SwashCache,
-    #[expect(
-        dead_code,
-        reason = "glyphon Cache kept alive for the atlas; not accessed directly"
-    )]
     cache: Cache,
-    atlas: TextAtlas,
-    renderer: GlyphonTextRenderer,
+    format: wgpu::TextureFormat,
+    layers: HashMap<u8, TextLayer>,
 
     // Immediate mode text entries
     entries: Vec<TextEntry>,
     available_buffers: Vec<Buffer>,
     scratch_buffer: Buffer,
-    clip_stack: Vec<[i32; 4]>,
-
-    viewport: glyphon::Viewport,
+    clip_stack: Vec<[f32; 4]>,
 
     /// Font family for every draw / measure call.
     family: glyphon::FamilyOwned,
@@ -104,29 +59,18 @@ impl TextRenderer {
         let swash_cache = SwashCache::new();
         let cache = Cache::new(&ctx.device);
 
-        let mut atlas = TextAtlas::new(&ctx.device, &ctx.queue, &cache, format);
-
-        let renderer = GlyphonTextRenderer::new(
-            &mut atlas,
-            &ctx.device,
-            wgpu::MultisampleState::default(),
-            None,
-        );
-
         let scratch_buffer = Buffer::new(&mut font_system, Metrics::new(14.0, 18.0));
-        let viewport = glyphon::Viewport::new(&ctx.device, &cache);
 
         Self {
             font_system,
             swash_cache,
             cache,
-            atlas,
-            renderer,
+            format,
+            layers: HashMap::new(),
             entries: Vec::new(),
             available_buffers: Vec::new(),
             scratch_buffer,
             clip_stack: Vec::new(),
-            viewport,
             family: glyphon::FamilyOwned::Monospace,
             mono_family: glyphon::FamilyOwned::Monospace,
             layer: 0,
@@ -175,8 +119,11 @@ impl TextRenderer {
 
     /// Update the viewport size.
     pub fn resize(&mut self, ctx: &WgpuContext, width: u32, height: u32) {
-        self.viewport
-            .update(&ctx.queue, Resolution { width, height });
+        for layer in self.layers.values_mut() {
+            layer
+                .viewport
+                .update(&ctx.queue, Resolution { width, height });
+        }
     }
 
     /// Begin a new frame for immediate mode text rendering.
@@ -201,16 +148,14 @@ impl TextRenderer {
         let mut right = x + w;
         let mut bottom = y + h;
         if let Some(&[pl, pt, pr, pb]) = self.clip_stack.last() {
-            left = left.max(pl as f32);
-            top = top.max(pt as f32);
-            right = right.min(pr as f32);
-            bottom = bottom.min(pb as f32);
+            left = left.max(pl);
+            top = top.max(pt);
+            right = right.min(pr);
+            bottom = bottom.min(pb);
         }
         // Keep the rect non-inverted so glyphon never sees right < left.
-        let left = left.max(0.0) as i32;
-        let top = top.max(0.0) as i32;
-        let right = right.max(left as f32) as i32;
-        let bottom = bottom.max(top as f32) as i32;
+        let right = right.max(left);
+        let bottom = bottom.max(top);
         self.clip_stack.push([left, top, right, bottom]);
     }
 
@@ -311,194 +256,15 @@ impl TextRenderer {
 
         (width, height)
     }
-
-    /// Render every layer of text (in layer order) on top of `view`.
-    pub fn render(
-        &mut self,
-        ctx: &WgpuContext,
-        encoder: &mut wgpu::CommandEncoder,
-        view: &wgpu::TextureView,
-        width: u32,
-        height: u32,
-    ) -> anyhow::Result<()> {
-        for layer in 0..=self.max_layer() {
-            self.render_layer(ctx, encoder, view, width, height, layer)?;
-        }
-        Ok(())
-    }
-
-    /// Render only the entries tagged with `layer`.
-    pub fn render_layer(
-        &mut self,
-        ctx: &WgpuContext,
-        encoder: &mut wgpu::CommandEncoder,
-        view: &wgpu::TextureView,
-        width: u32,
-        height: u32,
-        layer: u8,
-    ) -> anyhow::Result<()> {
-        // Update viewport
-        self.viewport
-            .update(&ctx.queue, Resolution { width, height });
-
-        let mut text_areas = Vec::with_capacity(self.entries.len());
-
-        for entry in self.entries.iter().filter(|e| e.layer == layer) {
-            let bounds = entry.clip.map_or(
-                TextBounds {
-                    left: 0,
-                    top: 0,
-                    right: width as i32,
-                    bottom: height as i32,
-                },
-                |[left, top, right, bottom]| TextBounds {
-                    left,
-                    top,
-                    right,
-                    bottom,
-                },
-            );
-            text_areas.push(TextArea {
-                buffer: &entry.buffer,
-                left: entry.left,
-                top: entry.top,
-                scale: 1.0,
-                bounds,
-                default_color: entry.color,
-                custom_glyphs: &[],
-            });
-        }
-
-        self.renderer.prepare(
-            &ctx.device,
-            &ctx.queue,
-            &mut self.font_system,
-            &mut self.atlas,
-            &self.viewport,
-            text_areas,
-            &mut self.swash_cache,
-        )?;
-
-        {
-            let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                label: Some("text render pass"),
-                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                    view,
-                    resolve_target: None,
-                    ops: wgpu::Operations {
-                        load: wgpu::LoadOp::Load,
-                        store: wgpu::StoreOp::Store,
-                    },
-                    depth_slice: None,
-                })],
-                depth_stencil_attachment: None,
-                timestamp_writes: None,
-                occlusion_query_set: None,
-                multiview_mask: None,
-            });
-
-            self.renderer
-                .render(&self.atlas, &self.viewport, &mut pass)?;
-        }
-
-        Ok(())
-    }
-
-    /// Trim the atlas to free unused space.
-    pub fn trim(&mut self) {
-        self.atlas.trim();
-    }
 }
 
-/// glyphon attributes for `style` (fields are borrowed separately so buffers and the font
-/// system stay mutably available).
-fn attrs_for<'a>(
-    family: &'a glyphon::FamilyOwned,
-    mono: &'a glyphon::FamilyOwned,
-    style: TextStyle,
-) -> Attrs<'a> {
-    let family = if style.mono { mono } else { family };
-    Attrs::new()
-        .family(family.as_family())
-        .weight(Weight(style.weight))
-}
-
-/// Hashable form of a [`TextStyle`] for the measure cache.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-struct MeasureKey {
-    mono: bool,
-    weight: u16,
-    spacing: u32,
-}
-
-impl From<TextStyle> for MeasureKey {
-    fn from(s: TextStyle) -> Self {
-        Self {
-            mono: s.mono,
-            weight: s.weight,
-            spacing: s.letter_spacing.to_bits(),
-        }
-    }
-}
-
-/// Letter spacing is emulated by interleaving hair spaces (U+200A) — cosmic-text has no
-/// per-glyph advance, and the headings that use it are a few characters long.
-fn spaced(text: &str, letter_spacing: f32) -> std::borrow::Cow<'_, str> {
-    if letter_spacing <= 0.0 || text.chars().count() < 2 {
-        return std::borrow::Cow::Borrowed(text);
-    }
-    // One hair space is about 1/8 em; round the requested spacing to that unit.
-    let n = ((letter_spacing * 8.0).round() as usize).max(1);
-    let filler = "\u{200a}".repeat(n);
-    let mut out = String::with_capacity(text.len() * (n + 1));
-    let mut first = true;
-    for c in text.chars() {
-        if !first {
-            out.push_str(&filler);
-        }
-        first = false;
-        out.push(c);
-    }
-    std::borrow::Cow::Owned(out)
-}
-
-/// Helper for building text content with formatting.
-pub struct TextBuilder {
-    lines: Vec<String>,
-}
-
-impl TextBuilder {
-    /// Create a new text builder.
-    pub fn new() -> Self {
-        Self { lines: Vec::new() }
-    }
-
-    /// Add a line of text.
-    pub fn line(mut self, text: impl Into<String>) -> Self {
-        self.lines.push(text.into());
-        self
-    }
-
-    /// Add an empty line.
-    pub fn blank(mut self) -> Self {
-        self.lines.push(String::new());
-        self
-    }
-
-    /// Add a separator line.
-    pub fn separator(mut self, char: char, width: usize) -> Self {
-        self.lines.push(char.to_string().repeat(width));
-        self
-    }
-
-    /// Build the final text string.
-    pub fn build(self) -> String {
-        self.lines.join("\n")
-    }
-}
-
-impl Default for TextBuilder {
-    fn default() -> Self {
-        Self::new()
-    }
-}
+mod attributes;
+mod builder;
+mod render;
+#[cfg(feature = "window")]
+mod scope;
+pub use attributes::TextStyle;
+use attributes::{attrs_for, spaced, MeasureKey};
+pub use builder::TextBuilder;
+#[cfg(feature = "window")]
+pub(crate) use scope::{TextPaintRange, TextPaintScope};

@@ -5,6 +5,7 @@
 //! they finish. Widgets live in `widgets.rs` / `containers.rs` as further `impl Ui`.
 
 use glam::Vec2;
+use std::collections::HashMap;
 
 use super::frame::Gui;
 use super::style::Style;
@@ -30,6 +31,8 @@ pub struct Ui<'g> {
     next_width: Option<f32>,
     next_height: Option<f32>,
     clipped: bool,
+    next_id: Option<Id>,
+    id_counts: HashMap<Id, u64>,
 }
 
 impl core::fmt::Debug for Ui<'_> {
@@ -60,6 +63,8 @@ impl<'g> Ui<'g> {
             next_width: None,
             next_height: None,
             clipped: false,
+            next_id: None,
+            id_counts: HashMap::new(),
         }
     }
 
@@ -81,6 +86,23 @@ impl<'g> Ui<'g> {
     /// An id for a child widget.
     pub fn make_id(&self, source: impl core::hash::Hash) -> Id {
         self.id.with(source)
+    }
+
+    /// Give the next widget a stable identity independent of its label and call order.
+    /// The identity is scoped to this `Ui` and consumed exactly once.
+    pub fn set_next_id(&mut self, source: impl core::hash::Hash) {
+        self.next_id = Some(self.make_id(source));
+    }
+
+    pub(crate) fn next_widget_id(&mut self, source: impl core::hash::Hash) -> Id {
+        if let Some(id) = self.next_id.take() {
+            return id;
+        }
+        let base = self.make_id(source);
+        let count = self.id_counts.entry(base).or_default();
+        let id = base.with(*count);
+        *count = count.wrapping_add(1);
+        id
     }
 
     /// The region.
@@ -256,79 +278,6 @@ impl<'g> Ui<'g> {
             self.line_cross = 0.0;
         }
     }
-
-    /// A child `Ui` over `rect` with the given direction. Its used size is **not** fed
-    /// back; use it for absolutely placed regions (dock panels, popups).
-    pub fn child(&mut self, id: Id, rect: Rect, dir: Dir) -> Ui<'_> {
-        let mut c = Ui::new(self.gui, id, rect);
-        c.dir = dir;
-        c.enabled = self.enabled;
-        c
-    }
-
-    /// Lay out `add` horizontally starting at the cursor; the row's size is allocated
-    /// from this `Ui` afterwards.
-    pub fn horizontal<R>(&mut self, add: impl FnOnce(&mut Ui<'_>) -> R) -> R {
-        self.nested(Dir::Horizontal, add)
-    }
-
-    /// Lay out `add` vertically in a nested `Ui`; its used size is allocated afterwards.
-    pub fn vertical<R>(&mut self, add: impl FnOnce(&mut Ui<'_>) -> R) -> R {
-        self.nested(Dir::Vertical, add)
-    }
-
-    fn nested<R>(&mut self, dir: Dir, add: impl FnOnce(&mut Ui<'_>) -> R) -> R {
-        let id = self.id.with(self.cursor.to_array().map(f32::to_bits));
-        let rect = self.available();
-        let enabled = self.enabled;
-        let gap = self.gap;
-        let (result, used) = {
-            let mut c = Ui::new(self.gui, id, rect);
-            c.dir = dir;
-            c.enabled = enabled;
-            c.gap = gap;
-            let r = add(&mut c);
-            (r, c.used_size())
-        };
-        let _ = self.allocate(used);
-        result
-    }
-
-    /// Run `add` inside a clip rect (content outside `rect` is not drawn).
-    pub fn clipped<R>(&mut self, rect: Rect, add: impl FnOnce(&mut Ui<'_>) -> R) -> R {
-        self.gui.push_clip(rect);
-        let r = add(self);
-        self.gui.pop_clip();
-        r
-    }
-
-    /// Whether this `Ui` is inside a clip (informational).
-    pub fn is_clipped(&self) -> bool {
-        self.clipped
-    }
-
-    pub(crate) fn set_clipped(&mut self, clipped: bool) {
-        self.clipped = clipped;
-    }
-
-    /// Split the remaining region into `n` equal columns and run `add` for each.
-    pub fn columns(&mut self, n: usize, mut add: impl FnMut(usize, &mut Ui<'_>)) {
-        let n = n.max(1);
-        let avail = self.available();
-        let gap = self.gap;
-        let col_w = ((avail.width() - gap * (n as f32 - 1.0)) / n as f32).max(0.0);
-        let enabled = self.enabled;
-        let mut max_h: f32 = 0.0;
-        for i in 0..n {
-            let x = avail.min.x + i as f32 * (col_w + gap);
-            let rect = Rect::new(x, avail.min.y, col_w, avail.height());
-            let id = self.id.with(("col", i));
-            let mut c = Ui::new(self.gui, id, rect);
-            c.enabled = enabled;
-            c.gap = gap;
-            add(i, &mut c);
-            max_h = max_h.max(c.used_size().y);
-        }
-        let _ = self.allocate(Vec2::new(avail.width(), max_h));
-    }
 }
+
+mod layout;
