@@ -2158,6 +2158,16 @@ dependencies = [
 
 [[package]]
 name = "quick-xml"
+version = "0.39.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "cdcc8dd4e2f670d309a5f0e83fe36dfdc05af317008fea29144da1a2ac858e5e"
+dependencies = [
+ "memchr",
+ "serde",
+]
+
+[[package]]
+name = "quick-xml"
 version = "0.41.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e660451e55124f798a69a5af3f49ccfbefbd41910eefd25caf2393e1f3473ec1"
@@ -2418,7 +2428,7 @@ dependencies = [
  "tessera-physics",
  "thiserror 2.0.20",
  "tracing",
- "urdf-rs",
+ "urdf-rs 0.10.0",
  "wgpu 30.0.1",
  "winit",
 ]
@@ -2790,7 +2800,7 @@ dependencies = [
  "pollster 0.4.0",
  "quick-xml 0.36.2",
  "thiserror 2.0.20",
- "urdf-rs",
+ "urdf-rs 0.9.0",
  "wgpu 28.0.0",
 ]
 
@@ -3008,6 +3018,20 @@ dependencies = [
  "serde",
  "serde-xml-rs",
  "thiserror 1.0.69",
+]
+
+[[package]]
+name = "urdf-rs"
+version = "0.10.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0c1c4d002a2d281d6ae7a1a8b319bddc50506a35731e826fb9dbd8d648c39bcf"
+dependencies = [
+ "RustyXML",
+ "quick-xml 0.39.4",
+ "regex",
+ "serde",
+ "serde-xml-rs",
+ "thiserror 2.0.20",
 ]
 
 [[package]]
