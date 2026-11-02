@@ -71,7 +71,7 @@ impl Fixture {
         bmp.extend(1_u16.to_le_bytes());
         bmp.extend(32_u16.to_le_bytes());
         bmp.extend([0; 24]);
-        for pixel in image.chunks_exact(4) {
+        for pixel in image.as_chunks::<4>().0 {
             bmp.extend([pixel[2], pixel[1], pixel[0], pixel[3]]);
         }
         std::fs::write(directory.join(format!("{name}.bmp")), bmp).unwrap();
@@ -126,7 +126,7 @@ fn tapered_fill_has_black_border_and_a_pointed_tip() {
 
 #[test]
 fn half_pixel_gui_outline_scales_with_dpi() {
-    for (scale, expected_border) in [(1_u16, 128), (2, 0)] {
+    for (scale, expected_border, tolerance) in [(1_u16, 128, 1), (2, 0, 0)] {
         let mut f = Fixture::new(128 * scale);
         f.scene
             .lines
@@ -136,10 +136,10 @@ fn half_pixel_gui_outline_scales_with_dpi() {
         let center = u32::from(64 * scale);
         let edge = center + u32::from(scale);
         assert_eq!(f.pixel(&image, [center, edge - 1]), [255, 0, 0, 255]);
-        assert_eq!(
-            f.pixel(&image, [center, edge]),
-            [0, 0, expected_border, 255]
-        );
+        let [red, green, blue, alpha] = f.pixel(&image, [center, edge]);
+        assert_eq!([red, green, alpha], [0, 0, 255]);
+        // Half coverage can round by one UNORM unit; opaque black stays exact.
+        assert!(blue.abs_diff(expected_border) <= tolerance, "blue = {blue}");
     }
 }
 
@@ -244,5 +244,9 @@ fn grown_buffers_keep_layer_ranges_and_drop_stale_instances() {
 
     f.scene.lines.clear();
     let empty = f.render(RenderOptions::default());
-    assert!(empty.chunks_exact(4).all(|pixel| pixel == [0, 0, 255, 255]));
+    assert!(empty
+        .as_chunks::<4>()
+        .0
+        .iter()
+        .all(|pixel| *pixel == [0, 0, 255, 255]));
 }

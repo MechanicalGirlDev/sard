@@ -36,7 +36,10 @@ fn steep_taper_outline_covers_sloped_edges_and_padded_caps() {
             assert_eq!(f.pixel(&image, samples[0]), [0, 0, 0, 255]);
             // Two pixels beyond that endpoint, 70px off-axis has 50% coverage.
             // This needs BOTH the perpendicular slope factor and cap extrapolation.
-            assert_eq!(f.pixel(&image, samples[1]), [0, 0, 128, 255]);
+            let [red, green, blue, alpha] = f.pixel(&image, samples[1]);
+            assert_eq!([red, green, alpha], [0, 0, 255]);
+            // Only the fractional blue channel permits one UNORM unit of rounding.
+            assert!(blue.abs_diff(128) <= 1, "blue = {blue}");
             assert_eq!(f.pixel(&image, samples[2]), [0, 0, 255, 255]);
             assert_eq!(f.pixel(&image, samples[3]), [0, 0, 255, 255]);
         }
@@ -102,7 +105,11 @@ fn invisible_and_zero_length_segments_do_not_cover_the_target() {
                 .with_layer(Layer::Overlay),
         );
         let image = f.render(RenderOptions::default());
-        assert!(image.chunks_exact(4).all(|pixel| pixel == [0, 0, 255, 255]));
+        assert!(image
+            .as_chunks::<4>()
+            .0
+            .iter()
+            .all(|pixel| *pixel == [0, 0, 255, 255]));
     }
 }
 
@@ -136,6 +143,10 @@ fn empty_regions_clear_without_issuing_invalid_gpu_viewports() {
             clear: true,
             region: Some(region),
         });
-        assert!(image.chunks_exact(4).all(|pixel| pixel == [0, 0, 255, 255]));
+        assert!(image
+            .as_chunks::<4>()
+            .0
+            .iter()
+            .all(|pixel| *pixel == [0, 0, 255, 255]));
     }
 }
