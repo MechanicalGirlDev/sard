@@ -317,7 +317,7 @@ name = "camera_controls"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "glam",
+ "glam 0.33.8",
  "sard",
 ]
 
@@ -691,7 +691,7 @@ name = "ecs_scene"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "glam",
+ "glam 0.33.8",
  "hecs",
  "sard",
 ]
@@ -707,7 +707,7 @@ name = "engine_app"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "glam",
+ "glam 0.33.8",
  "hecs",
  "sard",
 ]
@@ -769,7 +769,7 @@ name = "fog_effect"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "glam",
+ "glam 0.33.8",
  "sard",
  "wgpu 30.0.1",
 ]
@@ -938,6 +938,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a0990707078259d76f65619a692e87c82645be66cbee224173cd1af151e54ba2"
 
 [[package]]
+name = "glam"
+version = "0.34.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "627003914c6057c9c8f0832ee4f870b5a4f599d0cfa83f4072675114860cd0ff"
+
+[[package]]
 name = "glow"
 version = "0.17.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1010,7 +1016,7 @@ name = "gui_demo"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "glam",
+ "glam 0.33.8",
  "sard",
 ]
 
@@ -1084,7 +1090,7 @@ name = "hello_cube"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "glam",
+ "glam 0.33.8",
  "sard",
 ]
 
@@ -1151,7 +1157,7 @@ name = "instanced_rendering"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "glam",
+ "glam 0.33.8",
  "sard",
 ]
 
@@ -1305,7 +1311,7 @@ name = "lighting_demo"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "glam",
+ "glam 0.33.8",
  "sard",
 ]
 
@@ -1368,7 +1374,7 @@ name = "mass_physics"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "glam",
+ "glam 0.33.8",
  "hecs",
  "sard",
 ]
@@ -1378,7 +1384,7 @@ name = "materials_showcase"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "glam",
+ "glam 0.33.8",
  "sard",
 ]
 
@@ -1557,7 +1563,7 @@ name = "normals"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "glam",
+ "glam 0.33.8",
  "sard",
 ]
 
@@ -2014,7 +2020,7 @@ name = "particles"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "glam",
+ "glam 0.33.8",
  "sard",
 ]
 
@@ -2029,7 +2035,7 @@ name = "pbr"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "glam",
+ "glam 0.33.8",
  "sard",
 ]
 
@@ -2055,7 +2061,7 @@ name = "physics_demo"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "glam",
+ "glam 0.33.8",
  "hecs",
  "sard",
 ]
@@ -2131,7 +2137,7 @@ name = "point_cloud"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "glam",
+ "glam 0.33.8",
  "sard",
 ]
 
@@ -2492,7 +2498,7 @@ dependencies = [
  "anyhow",
  "arboard",
  "bytemuck",
- "glam",
+ "glam 0.34.3",
  "glyphon",
  "hecs",
  "nalgebra",
@@ -2614,7 +2620,7 @@ name = "shapes2d"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "glam",
+ "glam 0.33.8",
  "sard",
 ]
 
@@ -2763,7 +2769,7 @@ name = "sprites"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "glam",
+ "glam 0.33.8",
  "sard",
 ]
 
@@ -2846,7 +2852,7 @@ name = "terrain"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "glam",
+ "glam 0.33.8",
  "sard",
 ]
 
@@ -2882,7 +2888,7 @@ name = "texture"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "glam",
+ "glam 0.33.8",
  "sard",
 ]
 
@@ -3109,7 +3115,7 @@ name = "urdf_robot"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "glam",
+ "glam 0.33.8",
  "sard",
 ]
 
@@ -3935,7 +3941,7 @@ name = "wireframe"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "glam",
+ "glam 0.33.8",
  "sard",
 ]
 
