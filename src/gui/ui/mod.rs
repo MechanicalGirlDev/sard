@@ -14,8 +14,12 @@
 use crate::context::WgpuContext;
 use crate::gui::primitive::PrimitiveRenderer;
 use crate::gui::text::TextRenderer;
+use crate::gui::text_edit::{TextEdit, TextInput};
 use crate::window::event::{Event, Key, MouseButton};
 use glam::Vec2;
+use std::collections::HashMap;
+
+mod text_field;
 
 const fn button_index(button: MouseButton) -> usize {
     match button {
@@ -44,12 +48,16 @@ pub struct UiContext {
     scroll_delta: Vec2,
     text_input: String,
     pressed_keys: Vec<Key>,
+    text_editor: TextInput,
+    mouse_press_shift: bool,
+    mouse_press_position: Vec2,
 
     // Cross-frame widget state.
     active_widget: Option<u64>,
     focused_widget: Option<u64>,
     widget_counter: u64,
     blink: u32,
+    text_edits: HashMap<u64, TextEdit>,
 }
 
 impl UiContext {
@@ -67,10 +75,14 @@ impl UiContext {
             scroll_delta: Vec2::ZERO,
             text_input: String::new(),
             pressed_keys: Vec::new(),
+            text_editor: TextInput::default(),
+            mouse_press_shift: false,
+            mouse_press_position: Vec2::ZERO,
             active_widget: None,
             focused_widget: None,
             widget_counter: 0,
             blink: 0,
+            text_edits: HashMap::new(),
         }
     }
 
@@ -86,6 +98,8 @@ impl UiContext {
         self.scroll_delta = Vec2::ZERO;
         self.text_input.clear();
         self.pressed_keys.clear();
+        self.text_editor.update(events);
+        self.mouse_press_shift = false;
         self.widget_counter = 0;
         self.blink = self.blink.wrapping_add(1);
 
@@ -94,12 +108,25 @@ impl UiContext {
                 Event::MouseMotion { position, .. } => {
                     self.mouse_pos = Vec2::new(position.0, position.1);
                 }
-                Event::MousePress { button, .. } => {
+                Event::MousePress {
+                    button,
+                    position,
+                    modifiers,
+                    ..
+                } => {
+                    self.mouse_pos = Vec2::new(position.0, position.1);
                     let i = button_index(*button);
                     self.mouse_down[i] = true;
                     self.mouse_pressed[i] = true;
+                    if *button == MouseButton::Left {
+                        self.mouse_press_shift = modifiers.shift;
+                        self.mouse_press_position = self.mouse_pos;
+                    }
                 }
-                Event::MouseRelease { button, .. } => {
+                Event::MouseRelease {
+                    button, position, ..
+                } => {
+                    self.mouse_pos = Vec2::new(position.0, position.1);
                     let i = button_index(*button);
                     self.mouse_down[i] = false;
                     self.mouse_released[i] = true;
@@ -118,8 +145,12 @@ impl UiContext {
         if self.mouse_pressed[0] {
             self.focused_widget = None;
         }
-        // Drag-capture lasts only while the left button is held.
-        if !self.mouse_down[0] {
+        if self.pressed_keys.contains(&Key::Escape) {
+            self.focused_widget = None;
+            self.active_widget = None;
+        }
+        // Keep capture through the release frame so fields see its final position.
+        if !self.mouse_down[0] && !self.mouse_released[0] {
             self.active_widget = None;
         }
 
@@ -483,68 +514,5 @@ impl UiContext {
             .draw_circle(cx - radius, track_y + track_h * 0.5 - radius, radius, hcol);
 
         value
-    }
-
-    /// Draw an editable single-line text field. Returns `true` if `text` changed.
-    ///
-    /// Click to focus (click elsewhere to defocus); typed characters are appended and
-    /// Backspace deletes. A blinking caret is shown while focused.
-    pub fn text_input(&mut self, text: &mut String, x: f32, y: f32, w: f32) -> bool {
-        let id = self.next_id();
-        let h = 26.0;
-
-        if self.mouse_pressed[0] && point_in(self.mouse_pos, x, y, w, h) {
-            self.focused_widget = Some(id);
-        }
-        let focused = self.focused_widget == Some(id);
-
-        let mut changed = false;
-        if focused {
-            if !self.text_input.is_empty() {
-                text.push_str(&self.text_input);
-                changed = true;
-            }
-            let backspaces = self
-                .pressed_keys
-                .iter()
-                .filter(|k| **k == Key::Backspace)
-                .count();
-            for _ in 0..backspaces {
-                if text.pop().is_some() {
-                    changed = true;
-                }
-            }
-        }
-
-        let bg = if focused {
-            [0.18, 0.18, 0.24, 1.0]
-        } else {
-            [0.14, 0.14, 0.18, 1.0]
-        };
-        self.primitive.draw_rect(x, y, w, h, bg);
-        let border = if focused {
-            [0.45, 0.65, 0.95, 1.0]
-        } else {
-            [0.30, 0.30, 0.35, 1.0]
-        };
-        self.rect_outline(x, y, w, h, 1.5, border);
-
-        let pad = 6.0;
-        self.push_clip(x + 1.0, y, w - 2.0, h);
-        self.text
-            .draw_text(text, x + pad, y + 5.0, 14.0, [0.95, 0.95, 0.95, 1.0]);
-        if focused && (self.blink / 30).is_multiple_of(2) {
-            let (tw, _) = self.text.measure(text, 14.0);
-            self.primitive.draw_rect(
-                x + pad + tw + 1.0,
-                y + 5.0,
-                1.5,
-                16.0,
-                [0.95, 0.95, 0.95, 1.0],
-            );
-        }
-        self.pop_clip();
-
-        changed
     }
 }

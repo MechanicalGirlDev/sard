@@ -52,6 +52,7 @@ pub struct Gui {
     keys: Vec<Key>,
     keys_down: HashSet<Key>,
     typed: String,
+    text_input: super::text_edit::TextInput,
     last_click: Option<(f32, Vec2)>,
     double_click: bool,
 
@@ -86,6 +87,7 @@ pub struct Gui {
     // ----- persistent widget state -----
     scalars: HashMap<Id, f32>,
     cursors: HashMap<Id, usize>,
+    text_anchors: HashMap<Id, usize>,
     strings: HashMap<Id, String>,
     vec2s: HashMap<Id, Vec2>,
 }
@@ -115,6 +117,7 @@ impl Gui {
             keys: Vec::new(),
             keys_down: HashSet::new(),
             typed: String::new(),
+            text_input: super::text_edit::TextInput::default(),
             last_click: None,
             double_click: false,
             layer: LAYER_BASE,
@@ -143,6 +146,7 @@ impl Gui {
             modal_blocked_frame: false,
             scalars: HashMap::new(),
             cursors: HashMap::new(),
+            text_anchors: HashMap::new(),
             strings: HashMap::new(),
             vec2s: HashMap::new(),
         }

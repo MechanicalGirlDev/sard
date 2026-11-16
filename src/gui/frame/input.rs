@@ -8,6 +8,7 @@ impl Gui {
 
     /// Ingest input and reset per-frame state. Call once per frame before building UI.
     pub fn begin_frame(&mut self, events: &[Event], width: u32, height: u32, dt: f32) {
+        self.text_input.update(events);
         self.size = Vec2::new(width.max(1) as f32, height.max(1) as f32);
         self.dt = dt;
         self.time += dt;

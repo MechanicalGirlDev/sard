@@ -30,6 +30,8 @@ mod plot;
 #[cfg(feature = "window")]
 mod scroll;
 #[cfg(feature = "window")]
+mod text_edit;
+#[cfg(feature = "window")]
 mod tree_drag;
 #[cfg(feature = "window")]
 mod types;

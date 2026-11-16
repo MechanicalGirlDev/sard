@@ -316,7 +316,7 @@ where
 
                 // Emit composed text (shift/layout-correct) for text fields. Filter
                 // control characters so Backspace/Enter stay on the `KeyPress` path.
-                if pressed {
+                if pressed && (!modifiers.ctrl || modifiers.alt) {
                     if let Some(text) = key_event.text.as_ref() {
                         let text: String = text.chars().filter(|c| !c.is_control()).collect();
                         if !text.is_empty() {

@@ -123,6 +123,37 @@ impl Gui {
     /// Set caret state.
     pub fn set_text_cursor(&mut self, id: Id, value: usize) {
         let _ = self.cursors.insert(id, value);
+        let _ = self.text_anchors.insert(id, value);
+    }
+
+    pub(crate) fn text_edit(&self, id: Id, len: usize) -> super::super::text_edit::TextEdit {
+        let cursor = self.text_cursor(id).unwrap_or(len).min(len);
+        super::super::text_edit::TextEdit {
+            cursor,
+            anchor: self
+                .text_anchors
+                .get(&id)
+                .copied()
+                .unwrap_or(cursor)
+                .min(len),
+        }
+    }
+
+    pub(crate) fn edit_text(
+        &mut self,
+        id: Id,
+        text: &mut String,
+        state: &mut super::super::text_edit::TextEdit,
+        focused: bool,
+    ) -> (bool, bool) {
+        let result = if focused {
+            self.text_input.edit(text, state)
+        } else {
+            (false, false)
+        };
+        let _ = self.cursors.insert(id, state.cursor);
+        let _ = self.text_anchors.insert(id, state.anchor);
+        result
     }
 
     /// String state (a field's edit buffer).

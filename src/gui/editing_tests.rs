@@ -30,6 +30,129 @@ fn number(ui: &mut Ui<'_>, value: &mut f32) -> TextResponse {
 }
 
 #[test]
+fn text_selection_replaces_unicode_text_with_batched_shortcut() -> anyhow::Result<()> {
+    let ctx = WgpuContext::new_blocking(None)?;
+    let mut gui = Gui::new(&ctx, wgpu::TextureFormat::Rgba8Unorm);
+    let id = Id::new("clipboard-field");
+    let mut text = String::from("足立レイ");
+    gui.set_focus(Some(id));
+    let events = [
+        Event::KeyPress {
+            key: Key::A,
+            modifiers: Modifiers {
+                ctrl: true,
+                ..Modifiers::default()
+            },
+            handled: false,
+        },
+        Event::KeyRelease {
+            key: Key::Control,
+            modifiers: Modifiers::default(),
+            handled: false,
+        },
+        Event::Text {
+            text: "robot".into(),
+        },
+    ];
+    gui.begin_frame(&events, 200, 100, 0.016);
+    let response = gui
+        .root()
+        .text_input_sized(id, &mut text, glam::Vec2::new(180.0, 26.0));
+    anyhow::ensure!(text == "robot", "selected text was not replaced: {text:?}");
+    anyhow::ensure!(response.changed);
+    let mut legacy = super::UiContext::new(&ctx, wgpu::TextureFormat::Rgba8Unorm);
+    text = "足立レイ".into();
+    legacy.update(
+        &[pointer(true, (20.0, 10.0)), pointer(false, (20.0, 10.0))],
+        200,
+        100,
+    );
+    let _ = legacy.text_input(&mut text, 0.0, 0.0, 180.0);
+    legacy.update(&events, 200, 100);
+    anyhow::ensure!(legacy.text_input(&mut text, 0.0, 0.0, 180.0));
+    anyhow::ensure!(
+        text == "robot",
+        "legacy selected text was not replaced: {text:?}"
+    );
+    Ok(())
+}
+
+#[test]
+fn shifted_navigation_deletes_selected_unicode_without_splitting_characters() -> anyhow::Result<()>
+{
+    let ctx = WgpuContext::new_blocking(None)?;
+    for key in [Key::Backspace, Key::Delete] {
+        let mut gui = Gui::new(&ctx, wgpu::TextureFormat::Rgba8Unorm);
+        let id = Id::new("field");
+        let mut text = String::from("a足立");
+        gui.set_focus(Some(id));
+        gui.begin_frame(
+            &[
+                Event::KeyPress {
+                    key: Key::Left,
+                    modifiers: Modifiers {
+                        shift: true,
+                        ..Modifiers::default()
+                    },
+                    handled: false,
+                },
+                Event::KeyPress {
+                    key,
+                    modifiers: Modifiers::default(),
+                    handled: false,
+                },
+            ],
+            200,
+            100,
+            0.016,
+        );
+        let result = gui
+            .root()
+            .text_input_sized(id, &mut text, glam::Vec2::new(180.0, 26.0));
+        anyhow::ensure!(text == "a足" && result.changed);
+    }
+    Ok(())
+}
+
+#[test]
+fn text_drag_selects_through_a_batched_release_outside_the_field() -> anyhow::Result<()> {
+    let ctx = WgpuContext::new_blocking(None)?;
+    let drag = [pointer(true, (5.0, 10.0)), pointer(false, (250.0, 10.0))];
+    let delete = [Event::KeyPress {
+        key: Key::Delete,
+        modifiers: Modifiers::default(),
+        handled: false,
+    }];
+    let mut gui = Gui::new(&ctx, wgpu::TextureFormat::Rgba8Unorm);
+    let id = Id::new("field");
+    let mut text = String::from("robot");
+    gui.begin_frame(&drag, 300, 100, 0.016);
+    let _ = gui
+        .root()
+        .text_input_sized(id, &mut text, glam::Vec2::new(180.0, 26.0));
+    gui.begin_frame(&delete, 300, 100, 0.016);
+    let _ = gui
+        .root()
+        .text_input_sized(id, &mut text, glam::Vec2::new(180.0, 26.0));
+    anyhow::ensure!(
+        text.is_empty(),
+        "drag did not select the new field: {text:?}"
+    );
+
+    let mut legacy = super::UiContext::new(&ctx, wgpu::TextureFormat::Rgba8Unorm);
+    text = "robot".into();
+    legacy.update(&drag, 300, 100);
+    let _ = legacy.text_input(&mut text, 0.0, 0.0, 180.0);
+    legacy.update(&delete, 300, 100);
+    let _ = legacy.text_input(&mut text, 0.0, 0.0, 180.0);
+    anyhow::ensure!(
+        text.is_empty(),
+        "drag did not select the legacy field: {text:?}"
+    );
+    Ok(())
+}
+
+#[test]
 fn numeric_text_commits_clamped_value_or_cancels_on_escape() -> anyhow::Result<()> {
     let ctx = WgpuContext::new_blocking(None)?;
     for (key, expected, submitted) in [(Key::Enter, 10.0_f32, true), (Key::Escape, 1.0, false)] {

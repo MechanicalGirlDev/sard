@@ -31,74 +31,44 @@ impl Ui<'_> {
     ) -> TextResponse {
         let style = self.style().clone();
         let ts = TextStyle::MONO;
-        let r = self.allocate_response(size, Sense::CLICK, id);
+        let r = self.allocate_response(size, Sense::DRAG, id);
         let chars: Vec<char> = text.chars().collect();
-        let mut cursor = self
-            .gui()
-            .text_cursor(id)
-            .unwrap_or(chars.len())
-            .min(chars.len());
+        let mut edit = self.gui().text_edit(id, chars.len());
         let pad = 5.0;
         let text_x = r.rect.min.x + pad;
         let enabled = self.enabled();
 
-        if r.pressed && enabled {
+        if enabled && (r.pressed || r.dragged || r.drag_released) {
             self.gui().set_focus(Some(id));
-            // Place the caret at the nearest character boundary.
-            let mx = self.gui().mouse().x;
-            let mut best = chars.len();
-            let mut best_d = f32::INFINITY;
-            for i in 0..=chars.len() {
-                let prefix: String = chars[..i].iter().collect();
-                let w = self.gui().measure_styled(&prefix, style.font_size, ts).x;
-                let d = (text_x + w - mx).abs();
-                if d < best_d {
-                    best_d = d;
-                    best = i;
+            let origin = self.gui().mouse_press_position(crate::MouseButton::Left).x;
+            let mouse = self.gui().mouse().x;
+            for (mx, extend) in [(origin, self.gui().key_down(Key::Shift)), (mouse, true)]
+                .into_iter()
+                .skip(usize::from(!r.pressed))
+            {
+                let mut best = chars.len();
+                let mut best_d = f32::INFINITY;
+                for i in 0..=chars.len() {
+                    let prefix: String = chars[..i].iter().collect();
+                    let w = self.gui().measure_styled(&prefix, style.font_size, ts).x;
+                    let d = (text_x + w - mx).abs();
+                    if d < best_d {
+                        best_d = d;
+                        best = i;
+                    }
                 }
+                edit.move_to(best, extend);
             }
-            cursor = best;
         }
         let focused = self.gui().has_focus(id) && enabled;
-        let mut changed = false;
-        let mut submitted = false;
-        let mut chars = chars;
         if focused {
             self.gui().use_keyboard();
-            let typed = self.gui().typed().to_owned();
-            if !typed.is_empty() {
-                for c in typed.chars() {
-                    chars.insert(cursor, c);
-                    cursor += 1;
-                }
-                changed = true;
-            }
-            let keys: Vec<Key> = self.gui().keys_pressed().to_vec();
-            for k in keys {
-                match k {
-                    Key::Backspace if cursor > 0 => {
-                        let _ = chars.remove(cursor - 1);
-                        cursor -= 1;
-                        changed = true;
-                    }
-                    Key::Delete if cursor < chars.len() => {
-                        let _ = chars.remove(cursor);
-                        changed = true;
-                    }
-                    Key::Left => cursor = cursor.saturating_sub(1),
-                    Key::Right => cursor = (cursor + 1).min(chars.len()),
-                    Key::Home => cursor = 0,
-                    Key::End => cursor = chars.len(),
-                    Key::Enter => submitted = true,
-                    Key::Escape => self.gui().set_focus(None),
-                    _ => {}
-                }
-            }
-            if changed {
-                *text = chars.iter().collect();
-            }
         }
-        self.gui().set_text_cursor(id, cursor);
+        let (changed, submitted) = self.gui().edit_text(id, text, &mut edit, focused);
+        if focused && self.gui().key_pressed(Key::Escape) {
+            self.gui().set_focus(None);
+        }
+        let chars: Vec<char> = text.chars().collect();
 
         let p = &style.palette;
         let (bg, border) = if !enabled {
@@ -117,6 +87,17 @@ impl Ui<'_> {
         let y = r.rect.center().y - measured.y.max(style.font_size * 1.2) * 0.5;
         let fg = if enabled { p.text } else { p.text_disabled };
         self.gui().push_clip(inner);
+        if focused && !edit.selection().is_empty() {
+            let selection = edit.selection();
+            let before: String = chars[..selection.start].iter().collect();
+            let selected: String = chars[selection].iter().collect();
+            let start = text_x + self.gui().measure_styled(&before, style.font_size, ts).x;
+            let width = self.gui().measure_styled(&selected, style.font_size, ts).x;
+            self.gui().paint_rect(
+                Rect::new(start, y, width, style.font_size * 1.2),
+                p.accent_bg,
+            );
+        }
         if text.is_empty() && !hint.is_empty() && !focused {
             self.gui()
                 .paint_text(hint, Vec2::new(text_x, y), style.font_size, p.text_faint);
@@ -125,7 +106,7 @@ impl Ui<'_> {
                 .paint_text_styled(text, Vec2::new(text_x, y), style.font_size, fg, ts);
         }
         if focused && (self.gui().time() * 2.0).fract() < 0.5 {
-            let prefix: String = chars[..cursor.min(chars.len())].iter().collect();
+            let prefix: String = chars[..edit.cursor].iter().collect();
             let cx = text_x + self.gui().measure_styled(&prefix, style.font_size, ts).x;
             let caret = Rect::new(cx, y + 1.0, 1.0, style.font_size * 1.2 - 2.0);
             self.gui().paint_rect(caret, p.text);
