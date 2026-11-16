@@ -79,7 +79,7 @@ impl TextInput {
                                 state.cursor = chars.len();
                             }
                             Key::C | Key::X if !selected.is_empty() => {
-                                let copied: String = chars[selected.clone()].iter().collect();
+                                let copied: String = chars[selected].iter().collect();
                                 match self
                                     .clipboard()
                                     .and_then(|clipboard| clipboard.set_text(copied))

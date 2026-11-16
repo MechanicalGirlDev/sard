@@ -302,7 +302,7 @@ impl DockTree {
 
     /// All panel ids in tree order.
     pub fn panels(&self) -> Vec<String> {
-        self.root.as_ref().map(DockNode::panels).unwrap_or_default()
+        self.root.as_ref().map_or_else(Vec::new, DockNode::panels)
     }
 
     /// Whether `panel` is in the tree.
