@@ -42,7 +42,7 @@ arboard = { version = "3.6.1", default-features = false, features = ["wayland-da
 glam = "0.33.8"
 
 # URDF
-urdf-rs = "0.9.0"
+urdf-rs = "0.10.0"
 
 # ECS (optional)
 hecs = { version = "0.11.1", optional = true }
