@@ -1,4 +1,4 @@
-//! Shared single-line editing for both widget APIs.
+//! Single-line widget editing and clipboard input.
 
 use std::ops::Range;
 
@@ -11,13 +11,6 @@ pub(crate) struct TextEdit {
 }
 
 impl TextEdit {
-    pub(super) fn at(cursor: usize) -> Self {
-        Self {
-            cursor,
-            anchor: cursor,
-        }
-    }
-
     pub(super) fn selection(self) -> Range<usize> {
         self.cursor.min(self.anchor)..self.cursor.max(self.anchor)
     }

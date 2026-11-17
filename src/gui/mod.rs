@@ -3,15 +3,12 @@
 //! Provides UI rendering capabilities including text and 2D primitives.
 //!
 //! [`PrimitiveRenderer`] and [`TextRenderer`] are window-independent and available
-//! whenever the `gui` feature is on. [`UiContext`] is an immediate-mode widget layer
-//! built on the window event types, so it additionally requires the `window` feature.
+//! whenever the `gui` feature is on. The immediate-mode [`Gui`] and [`Ui`] widget
+//! layer additionally requires the `window` feature for its input events.
 
 pub mod primitive;
 pub mod style;
 pub mod text;
-
-#[cfg(feature = "window")]
-pub mod ui;
 
 #[cfg(feature = "window")]
 mod builder;
@@ -78,7 +75,5 @@ pub use scroll::{ScrollRegion, ScrollRegions, ScrollState};
 pub use tree_drag::{TreeDrag, TreeDrop, TreeDropPosition};
 #[cfg(feature = "window")]
 pub use types::{Align, Dir, Id, Rect, Response, Sense};
-#[cfg(feature = "window")]
-pub use ui::UiContext;
 #[cfg(feature = "window")]
 pub use widgets::{ButtonKind, ButtonStyle, Range, TextResponse};

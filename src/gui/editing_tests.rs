@@ -60,20 +60,6 @@ fn text_selection_replaces_unicode_text_with_batched_shortcut() -> anyhow::Resul
         .text_input_sized(id, &mut text, glam::Vec2::new(180.0, 26.0));
     anyhow::ensure!(text == "robot", "selected text was not replaced: {text:?}");
     anyhow::ensure!(response.changed);
-    let mut legacy = super::UiContext::new(&ctx, wgpu::TextureFormat::Rgba8Unorm);
-    text = "足立レイ".into();
-    legacy.update(
-        &[pointer(true, (20.0, 10.0)), pointer(false, (20.0, 10.0))],
-        200,
-        100,
-    );
-    let _ = legacy.text_input(&mut text, 0.0, 0.0, 180.0);
-    legacy.update(&events, 200, 100);
-    anyhow::ensure!(legacy.text_input(&mut text, 0.0, 0.0, 180.0));
-    anyhow::ensure!(
-        text == "robot",
-        "legacy selected text was not replaced: {text:?}"
-    );
     Ok(())
 }
 
@@ -134,21 +120,7 @@ fn text_drag_selects_through_a_batched_release_outside_the_field() -> anyhow::Re
     let _ = gui
         .root()
         .text_input_sized(id, &mut text, glam::Vec2::new(180.0, 26.0));
-    anyhow::ensure!(
-        text.is_empty(),
-        "drag did not select the new field: {text:?}"
-    );
-
-    let mut legacy = super::UiContext::new(&ctx, wgpu::TextureFormat::Rgba8Unorm);
-    text = "robot".into();
-    legacy.update(&drag, 300, 100);
-    let _ = legacy.text_input(&mut text, 0.0, 0.0, 180.0);
-    legacy.update(&delete, 300, 100);
-    let _ = legacy.text_input(&mut text, 0.0, 0.0, 180.0);
-    anyhow::ensure!(
-        text.is_empty(),
-        "drag did not select the legacy field: {text:?}"
-    );
+    anyhow::ensure!(text.is_empty(), "drag did not select the field: {text:?}");
     Ok(())
 }
 
